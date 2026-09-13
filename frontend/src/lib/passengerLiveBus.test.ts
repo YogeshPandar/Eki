@@ -33,18 +33,22 @@ describe("passenger live-bus normalization", () => {
     ).toBeNull();
   });
 
-  it("keeps an active session pending until direction is resolved", () => {
-    expect(
-      normalizePassengerLiveBus(
-        "Bus01_route_1",
-        telemetry({
-          status: "active",
-          sessionId: "session_1",
-          tripState: "pre_departure",
-        }),
-        now,
-      ),
-    ).toBeNull();
+  it("keeps an active session visible while direction is pending", () => {
+    const pending = normalizePassengerLiveBus(
+      "Bus01_route_1",
+      telemetry({
+        status: "active",
+        sessionId: "session_1",
+        tripState: "pre_departure",
+      }),
+      now,
+    );
+    expect(pending).toMatchObject({
+      busId: "Bus01",
+      sessionId: "session_1",
+      tripState: "pre_departure",
+    });
+    expect(pending?.direction).toBeUndefined();
   });
 
   it("shows fresh and stale passenger-eligible session buses", () => {
@@ -176,10 +180,15 @@ describe("passenger live-bus normalization", () => {
     });
   });
 
-  it("preserves multiple eligible buses and stable session keys", () => {
+  it("preserves pending and eligible rides but not device-only entries", () => {
     const buses = passengerLiveBuses(
       {
         deviceOnly: telemetry(),
+        pending: telemetry({
+          busId: "Bus00",
+          status: "active",
+          sessionId: "session_pending",
+        }),
         Bus01_route_1: telemetry({
           status: "active",
           sessionId: "session_1",
@@ -195,9 +204,10 @@ describe("passenger live-bus normalization", () => {
       },
       now,
     );
-    expect(buses.map((bus) => bus.busId)).toEqual(["Bus01", "Bus02"]);
-    expect(passengerLiveBusSelectionKey(buses[0])).toBe("session:session_1");
-    expect(passengerLiveBusSelectionKey(buses[1])).toBe("session:session_2");
+    expect(buses.map((bus) => bus.busId)).toEqual(["Bus00", "Bus01", "Bus02"]);
+    expect(passengerLiveBusSelectionKey(buses[0])).toBe("session:session_pending");
+    expect(passengerLiveBusSelectionKey(buses[1])).toBe("session:session_1");
+    expect(passengerLiveBusSelectionKey(buses[2])).toBe("session:session_2");
   });
 
   it("observes a completed session even though that bus is no longer visible", () => {
