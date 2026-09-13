@@ -1,105 +1,135 @@
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAdmin } from "../middleware/requireAdmin";
+import {
+  searchGooglePlaces,
+  type PlaceResult,
+  type PlaceSearchFailureReason,
+} from "../lib/placeSearch";
 
 const router = Router();
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const searchCache = new Map<string, { expiresAt: number; results: PlaceResult[] }>();
-
-interface PlaceResult {
-  name: string;
-  address?: string;
-  lat: number;
-  lng: number;
-}
 
 const placeSearchLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Place search rate limit exceeded." },
+  handler: (_req, res, _next, options) => {
+    const retryAfterMs = options.windowMs;
+    res.set("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+    res.status(options.statusCode).json({
+      error: "Place search rate limit exceeded. Try again shortly.",
+      code: "PLACE_SEARCH_RATE_LIMITED",
+      retryAfterMs,
+    });
+  },
 });
 
-router.get("/search", placeSearchLimiter, requireAdmin, async (req: Request, res: Response) => {
+function sendResults(res: Response, results: PlaceResult[]): void {
+  res.json({
+    results,
+    ...(results.length === 0
+      ? {
+          code: "PLACE_SEARCH_NO_RESULTS",
+          message: "No matching places were found.",
+        }
+      : {}),
+  });
+}
+
+function failureResponse(reason: PlaceSearchFailureReason): {
+  status: number;
+  code: string;
+  error: string;
+} {
+  switch (reason) {
+    case "timeout":
+      return {
+        status: 504,
+        code: "PLACE_SEARCH_UPSTREAM_TIMEOUT",
+        error: "Place search timed out. Try again.",
+      };
+    case "rate_limit":
+      return {
+        status: 503,
+        code: "PLACE_SEARCH_UPSTREAM_RATE_LIMITED",
+        error: "Place search quota is temporarily unavailable. Try again shortly.",
+      };
+    case "invalid_response":
+      return {
+        status: 502,
+        code: "PLACE_SEARCH_INVALID_UPSTREAM_RESPONSE",
+        error: "Place search returned an invalid response. Try again.",
+      };
+    case "network":
+      return {
+        status: 502,
+        code: "PLACE_SEARCH_UPSTREAM_UNREACHABLE",
+        error: "Place search could not reach Google Places. Try again.",
+      };
+    case "upstream":
+    default:
+      return {
+        status: 502,
+        code: "PLACE_SEARCH_UPSTREAM_FAILURE",
+        error: "Place search service is temporarily unavailable.",
+      };
+  }
+}
+
+export async function handlePlaceSearch(req: Request, res: Response): Promise<void> {
   const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
   if (query.length < 3 || query.length > 200) {
-    res.status(400).json({ error: "Search text must be between 3 and 200 characters." });
+    res.status(400).json({
+      error: "Search text must be between 3 and 200 characters.",
+      code: "PLACE_SEARCH_INVALID_QUERY",
+    });
     return;
   }
 
   const cacheKey = query.toLowerCase();
   const cached = searchCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    res.json({ results: cached.results });
+    sendResults(res, cached.results);
     return;
   }
 
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
-    res.status(503).json({ error: "Place search is not configured on the server." });
+    res.status(503).json({
+      error: "Place search is not configured on the server.",
+      code: "PLACE_SEARCH_NOT_CONFIGURED",
+    });
     return;
   }
 
-  try {
-    const timeoutController = new AbortController();
-    const timeoutId = setTimeout(() => timeoutController.abort(), 5_000);
-    let response: globalThis.Response;
-    try {
-      response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": apiKey,
-          "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
-        },
-        body: JSON.stringify({ textQuery: query, maxResultCount: 5 }),
-        signal: timeoutController.signal,
-      });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (!response.ok) {
-      const upstreamBody = (await response.text()).slice(0, 1_000);
-      console.warn(
-        `[Places] Upstream request failed with HTTP ${response.status}: ${upstreamBody}`,
-      );
-      res.status(502).json({ error: "Place search service is unavailable." });
-      return;
-    }
-
-    const payload = await response.json() as { places?: unknown };
-    const results = Array.isArray(payload.places)
-      ? payload.places.flatMap((entry): PlaceResult[] => {
-          if (!entry || typeof entry !== "object") return [];
-          const value = entry as Record<string, unknown>;
-          const displayName = value.displayName as { text?: unknown } | undefined;
-          const location = value.location as { latitude?: unknown; longitude?: unknown } | undefined;
-          const title = typeof displayName?.text === "string" ? displayName.text : "";
-          const address = typeof value.formattedAddress === "string" ? value.formattedAddress : "";
-          // A stop name is persisted with a strict 100-character limit. Keep
-          // the concise Google display name as the value saved to the route;
-          // return the address separately so admins can still distinguish
-          // similarly named search results without creating invalid stops.
-          const name = title.trim().slice(0, 100);
-          const lat = Number(location?.latitude);
-          const lng = Number(location?.longitude);
-          return name && Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180
-            ? [{ name, ...(address ? { address } : {}), lat, lng }]
-            : [];
-        })
-      : [];
-
-    searchCache.set(cacheKey, { results, expiresAt: Date.now() + CACHE_TTL_MS });
-    if (searchCache.size > 100) {
-      const oldestKey = searchCache.keys().next().value;
-      if (oldestKey) searchCache.delete(oldestKey);
-    }
-    res.json({ results });
-  } catch (error) {
-    console.warn("Place search failed:", error);
-    res.status(502).json({ error: "Place search service is unavailable." });
+  const result = await searchGooglePlaces(query, apiKey);
+  if (!result.ok) {
+    const failure = failureResponse(result.reason);
+    console.warn("[Places] Search failed.", {
+      reason: result.reason,
+      upstreamStatus: result.upstreamStatus ?? null,
+    });
+    res.status(failure.status).json({
+      error: failure.error,
+      code: failure.code,
+    });
+    return;
   }
-});
+
+  searchCache.set(cacheKey, {
+    results: result.results,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+  if (searchCache.size > 100) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey) searchCache.delete(oldestKey);
+  }
+  sendResults(res, result.results);
+}
+
+router.get("/search", placeSearchLimiter, requireAdmin, handlePlaceSearch);
 
 export default router;
