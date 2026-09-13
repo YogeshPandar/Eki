@@ -62,7 +62,7 @@ function previousMatchCanBeHeld(
     raw.sampledAt !== currentTimestamp ||
     matched.routeVersion !== input.routeVersion ||
     !Number.isSafeInteger(raw.seq) ||
-    matched.seq >= raw.seq ||
+    matched.seq + 1 !== raw.seq ||
     matched.sampledAt >= currentTimestamp
   ) {
     return false;
