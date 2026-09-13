@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { apiRequest } from "./apiClient";
+import { ApiError, apiRequest } from "./apiClient";
 
 describe("apiRequest", () => {
   afterEach(() => {
@@ -23,13 +23,20 @@ describe("apiRequest", () => {
     );
   });
 
-  it("surfaces a server error message", async () => {
+  it("surfaces a server error message and structured metadata", async () => {
     vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.test");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: "Denied" }), { status: 403 }),
+      new Response(JSON.stringify({ error: "Denied", code: "AUTH_DENIED" }), {
+        status: 403,
+      }),
     ));
 
-    await expect(apiRequest("/api/test")).rejects.toThrow("Denied");
+    await expect(apiRequest("/api/test")).rejects.toMatchObject({
+      name: "ApiError",
+      message: "Denied",
+      status: 403,
+      code: "AUTH_DENIED",
+    });
   });
 
   it("uses the HTTP fallback for empty or non-string server errors", async () => {
@@ -39,9 +46,9 @@ describe("apiRequest", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "denied" } }), { status: 403 })));
 
     await expect(apiRequest("/api/test", { fallbackError: "Unavailable" }))
-      .rejects.toThrow("Unavailable (HTTP 502)");
+      .rejects.toMatchObject({ message: "Unavailable (HTTP 502)", status: 502 });
     await expect(apiRequest("/api/test", { fallbackError: "Denied" }))
-      .rejects.toThrow("Denied (HTTP 403)");
+      .rejects.toMatchObject({ message: "Denied (HTTP 403)", status: 403 });
   });
 
   it("returns undefined for a successful no-content response", async () => {
@@ -82,12 +89,17 @@ describe("apiRequest", () => {
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
   });
 
-  it("propagates a network failure and an already-aborted caller signal", async () => {
+  it("maps network failures to the caller-provided fallback", async () => {
     vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.test");
-    const networkError = new TypeError("Network request failed");
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(networkError));
-    await expect(apiRequest("/api/test")).rejects.toBe(networkError);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Network request failed")));
 
+    await expect(apiRequest("/api/test", {
+      fallbackError: "Backend unavailable. Check your connection and retry.",
+    })).rejects.toThrow("Backend unavailable. Check your connection and retry.");
+  });
+
+  it("preserves an already-aborted caller signal", async () => {
+    vi.stubEnv("NEXT_PUBLIC_BACKEND_URL", "https://api.example.test");
     const controller = new AbortController();
     controller.abort();
     vi.stubGlobal("fetch", vi.fn((_url, init: RequestInit = {}) =>
@@ -134,5 +146,15 @@ describe("apiRequest", () => {
       new Response("not-json", { status: 200 }),
     ));
     await expect(apiRequest("/api/test")).rejects.toBeInstanceOf(SyntaxError);
+  });
+
+  it("exports ApiError for endpoint-specific handling", () => {
+    const error = new ApiError("Denied", 403, "AUTH_DENIED");
+    expect(error).toMatchObject({
+      name: "ApiError",
+      message: "Denied",
+      status: 403,
+      code: "AUTH_DENIED",
+    });
   });
 });
