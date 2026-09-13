@@ -8,6 +8,8 @@ Copy-Item backend/.env.example backend/.env
 npm run dev --workspace=backend
 ```
 
+The copied template is intentionally local-development oriented: it uses `PORT=4000`, `NODE_ENV=development`, and allows the development frontend at `http://localhost:3000`. The production container does not depend on those local defaults; `backend/Dockerfile` sets `NODE_ENV=production` and `PORT=8080`, while the deployment environment must provide the exact production `CORS_ORIGIN` and other managed configuration.
+
 Important configuration is fully described in `.env.example`: exact CORS origins, `FIREBASE_DATABASE_URL`, server-restricted Maps key, device/auth limits, stale/reconciliation periods, worker identity and mandatory production retention enforcement. Production should prefer Workload Identity/ADC; if `FIREBASE_SERVICE_ACCOUNT` is used, provide the complete JSON through a secret manager.
 
 ```powershell
