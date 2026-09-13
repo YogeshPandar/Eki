@@ -1,5 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { normalizeRouteStopPayload, prepareRouteSavePayload, routeIdFromName } from "./routeStopPayload";
+import {
+  normalizeRouteStopPayload,
+  prepareRouteSavePayload,
+  reorderRouteStops,
+  routeIdFromName,
+} from "./routeStopPayload";
+
+describe("route stop ordering", () => {
+  const a = { id: "stop-a", name: "A" };
+  const b = { id: "stop-b", name: "B" };
+  const c = { id: "stop-c", name: "C" };
+
+  it("reorders without mutating stops or changing object identity", () => {
+    const source = [a, b, c];
+    const reordered = reorderRouteStops(source, 0, 2);
+
+    expect(reordered).toEqual([b, c, a]);
+    expect(reordered[0]).toBe(b);
+    expect(reordered[2]).toBe(a);
+    expect(source).toEqual([a, b, c]);
+  });
+
+  it("swapping two endpoints twice restores the original order and IDs", () => {
+    const swapped = reorderRouteStops([a, b], 0, 1);
+    expect(swapped.map((stop) => stop.id)).toEqual(["stop-b", "stop-a"]);
+
+    const restored = reorderRouteStops(swapped, 0, 1);
+    expect(restored.map((stop) => stop.id)).toEqual(["stop-a", "stop-b"]);
+    expect(restored[0]).toBe(a);
+    expect(restored[1]).toBe(b);
+  });
+
+  it("returns a safe copy for invalid or no-op moves", () => {
+    const source = [a, b];
+    for (const [from, to] of [[-1, 0], [0, -1], [2, 0], [0, 2], [0, 0]]) {
+      const result = reorderRouteStops(source, from, to);
+      expect(result).toEqual(source);
+      expect(result).not.toBe(source);
+    }
+  });
+});
 
 describe("route stop save payload", () => {
   it("normalizes an old verbose search result and serialized dragged coordinates", () => {

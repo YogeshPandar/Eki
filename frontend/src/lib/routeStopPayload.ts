@@ -56,6 +56,28 @@ export function routeIdFromName(name: string): string {
   return slug ? `route-${slug}` : `route-${Date.now()}`;
 }
 
+export function reorderRouteStops<T>(
+  stops: readonly T[],
+  from: number,
+  to: number,
+): T[] {
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    to < 0 ||
+    from >= stops.length ||
+    to >= stops.length ||
+    from === to
+  ) {
+    return [...stops];
+  }
+  const reordered = [...stops];
+  const [item] = reordered.splice(from, 1);
+  reordered.splice(to, 0, item);
+  return reordered;
+}
+
 function coordinate(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value === "string" && value.trim()) return Number(value);
