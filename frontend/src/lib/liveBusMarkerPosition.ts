@@ -57,17 +57,18 @@ function previousMatchCanBeHeld(
     !validDisplayMatch(matched) ||
     !hasValidBusCoordinates(input.lat, input.lng) ||
     !raw ||
+    typeof currentTimestamp !== "number" ||
     !Number.isFinite(currentTimestamp) ||
     raw.sampledAt !== currentTimestamp ||
     matched.routeVersion !== input.routeVersion ||
     !Number.isSafeInteger(raw.seq) ||
     matched.seq >= raw.seq ||
-    matched.sampledAt >= Number(currentTimestamp)
+    matched.sampledAt >= currentTimestamp
   ) {
     return false;
   }
 
-  const pendingAgeMs = Number(currentTimestamp) - matched.sampledAt;
+  const pendingAgeMs = currentTimestamp - matched.sampledAt;
   return pendingAgeMs <= MATCH_PENDING_HOLD_MS;
 }
 
