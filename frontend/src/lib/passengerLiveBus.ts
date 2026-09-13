@@ -1,5 +1,6 @@
 import { isActiveBusEntry, type ActiveBusEntry } from "./activeBusEntries";
 import { hasValidBusCoordinates } from "./liveBusFreshness";
+import { isPassengerServiceEligible } from "./rideServiceEligibility";
 
 export interface PassengerLiveBus extends ActiveBusEntry {
   busId: string;
@@ -24,8 +25,9 @@ function busIdFromNodeKey(key: string, routeId: string): string | null {
 
 /**
  * Convert one untrusted RTDB value into the single shape shared by the
- * passenger route list and map. A fresh device-only node is visible without a
- * session; a stale node is retained only while its ride is active.
+ * passenger route list and map. Device presence remains an admin/chat signal;
+ * passenger visibility requires an active session, explicit direction and a
+ * non-terminal ride state.
  */
 export function normalizePassengerLiveBus(
   key: string,
@@ -44,6 +46,7 @@ export function normalizePassengerLiveBus(
   const candidate: Record<string, unknown> = { ...raw, busId, routeId };
   if (
     !isActiveBusEntry(candidate, now) ||
+    !isPassengerServiceEligible(candidate) ||
     !hasValidBusCoordinates(candidate.lat, candidate.lng)
   ) {
     return null;
