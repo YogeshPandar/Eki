@@ -7,6 +7,10 @@ import {
 } from "../lib/polylineUtils";
 import { normalizeRideDirection, stopsInRideDirection } from "../lib/rideDirection";
 import { recordBackgroundFailure } from "../lib/backgroundFailureTracker";
+import {
+  LatestPendingWorker,
+  type LatestPendingWorkerStats,
+} from "../lib/latestPendingWorker";
 import type { DeviceAssignment } from "./deviceTelemetryService";
 import type { TelemetryPayload } from "./telemetryPayload";
 import {
@@ -48,7 +52,6 @@ interface LiveMatchedLocation extends LatLng {
 
 const routeCache = new Map<string, RouteCacheEntry>();
 const routeLoads = new Map<string, Promise<StoredRoute | null>>();
-const processingChains = new Map<string, Promise<void>>();
 
 function validLatLng(value: unknown): value is LatLng {
   if (!value || typeof value !== "object") return false;
@@ -654,29 +657,37 @@ export function isReliableMovingSample(acceptedSample: TelemetryPayload): boolea
   );
 }
 
+interface TelemetryRouteWork {
+  assignment: DeviceAssignment;
+  sample: TelemetryPayload;
+}
+
+const routeProcessingWorker = new LatestPendingWorker<string, TelemetryRouteWork>({
+  run: async (_nodeKey, work) => {
+    await processTelemetryRoute(work.assignment, work.sample);
+  },
+  onError: (nodeKey, error) => {
+    recordBackgroundFailure(
+      "devices.routeMatching",
+      "Telemetry route matching",
+      `[Routes] Matching/rerouting failed for ${nodeKey}:`,
+      error,
+    );
+  },
+});
+
+export function telemetryRouteProcessingStats(): LatestPendingWorkerStats {
+  return routeProcessingWorker.stats();
+}
+
 /**
- * Serialize matching per live node, but never await it from the HTTP telemetry
- * response. Live ingestion remains independent from Firestore/Routes API work.
+ * Keep one route job running and at most one latest pending fix per live node.
+ * Telemetry/lifecycle persistence completes before this derived work is queued.
  */
 export function scheduleTelemetryRouteProcessing(
   assignment: DeviceAssignment,
   sample: TelemetryPayload,
 ): void {
   const nodeKey = `${assignment.busId}_${assignment.routeId}`;
-  const previous = processingChains.get(nodeKey) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(() => processTelemetryRoute(assignment, sample))
-    .catch((error) => {
-      recordBackgroundFailure(
-        "devices.routeMatching",
-        "Telemetry route matching",
-        `[Routes] Matching/rerouting failed for ${nodeKey}:`,
-        error,
-      );
-    })
-    .finally(() => {
-      if (processingChains.get(nodeKey) === next) processingChains.delete(nodeKey);
-    });
-  processingChains.set(nodeKey, next);
+  routeProcessingWorker.schedule(nodeKey, { assignment, sample });
 }
