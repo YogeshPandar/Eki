@@ -107,7 +107,6 @@ Owner can read. All client writes are denied. `POST /api/users/bootstrap` transa
 | Field | Type | Meaning |
 |---|---|---|
 | `id`, `name`, `color` | string | Stable ID, display name and UI color |
-| `type` | `circular` / `up` / `down` when supplied | Route direction/category |
 | `waypoints[]` | `{lat,lng}` | Admin-entered control points |
 | `stops[]` | `{id,name,shortName,lat,lng,waypointIndex}` | Authoritative ordered stops |
 | `polyline`, `forwardPolyline`, `reversePolyline` | string | Legacy/forward geometry plus independently routed legal road geometry for each direction |

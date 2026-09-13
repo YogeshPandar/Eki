@@ -31,6 +31,7 @@ import {
 import { busStopArrivalTimestamps } from "@/lib/busEta";
 import { useDynamicRouteGeometries } from "@/hooks/useDynamicRouteGeometries";
 import { useTelemetryRenderTrace } from "@/hooks/useTelemetryRenderTrace";
+import { stopLabel } from "@/lib/stopLabel";
 
 export interface PassengerMapProps {
   targetStop: RouteStop;
@@ -580,13 +581,13 @@ function PassengerMapInner({
               <AdvancedMarker key={`stop-${stop.id || i}`} position={{ lat: stop.lat, lng: stop.lng }}>
                 {isPast ? (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, background: dotColor, opacity: 0.6, borderRadius: "50%" }}>
-                    <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 7 }}>{String.fromCharCode(65 + i)}</span>
+                    <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 7 }}>{stopLabel(i)}</span>
                   </div>
                 ) : isTarget ? (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                     <div style={{ position: "absolute", top: 2, width: 26, height: 26, background: dotColor, borderRadius: "50%", animation: "ripple 2s infinite" }} />
                     <div style={{ width: 26, height: 26, background: dotColor, border: `3.5px solid #000000`, borderRadius: "50%", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.5)" }}>
-                      <span style={{ color: "#ffffff", fontWeight: 900, fontSize: 12 }}>{String.fromCharCode(65 + i)}</span>
+                      <span style={{ color: "#ffffff", fontWeight: 900, fontSize: 12 }}>{stopLabel(i)}</span>
                     </div>
                     <span style={labelStyle}>
                       {stop.shortName}
@@ -595,7 +596,7 @@ function PassengerMapInner({
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                     <div style={{ width: 20, height: 20, background: dotColor, border: `3px solid #000000`, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 4px rgba(0,0,0,0.4)" }}>
-                      <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 9 }}>{String.fromCharCode(65 + i)}</span>
+                      <span style={{ color: "#ffffff", fontWeight: 800, fontSize: 9 }}>{stopLabel(i)}</span>
                     </div>
                     <span style={labelStyle}>
                       {stop.shortName}

@@ -35,6 +35,10 @@ import {
 } from "@/lib/rideDirection";
 import CustomSelect from "@/components/ui/CustomSelect";
 import { isLiveChatDeviceOnline } from "@/lib/activeBusEntries";
+import {
+  passengerBusAvailabilities,
+  type PassengerBusAvailability,
+} from "@/lib/passengerBusAvailability";
 
 const PassengerTrackingMap = dynamic(() => import("@/components/maps/PassengerTrackingMap"), {
   ssr: false,
@@ -73,6 +77,7 @@ export default function PassengerWorkspace() {
   const [selectedDestinationStopId, setSelectedDestinationStopId] = useState("");
   const [selectedLiveBusKey, setSelectedLiveBusKey] = useState("");
   const [activeBuses, setActiveBuses] = useState<ActiveBusData[]>([]);
+  const [availableBuses, setAvailableBuses] = useState<PassengerBusAvailability[]>([]);
   const [isMessagingOpen, setIsMessagingOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
@@ -140,6 +145,10 @@ export default function PassengerWorkspace() {
           }
         }
         setActiveBuses([...activeLiveBusesRef.current.values()]);
+        setAvailableBuses(passengerBusAvailabilities(
+          Object.fromEntries(rawLiveBusesRef.current),
+          Date.now(),
+        ));
         if (isAuthoritativeLiveBusDelivery(change.source)) {
           markSnapshotReceived();
         }
@@ -154,9 +163,12 @@ export default function PassengerWorkspace() {
     };
   }, [connectionGeneration, markSnapshotReceived, resumeGeneration]);
 
-  const activeRouteIds = Array.from(new Set(activeBuses.map(b => b.routeId)));
-  const availableRoutes = routes.filter(r => activeRouteIds.includes(r.id));
-  const displayRoutes = availableRoutes.filter(
+  const visibleRouteIds = new Set([
+    ...activeBuses.map((bus) => bus.routeId),
+    ...availableBuses.map((bus) => bus.routeId),
+  ]);
+  const serviceOrAvailableRoutes = routes.filter((route) => visibleRouteIds.has(route.id));
+  const displayRoutes = serviceOrAvailableRoutes.filter(
     (route) => (route.stops?.length ?? 0) > 0 || (route.waypoints?.length ?? 0) > 0,
   );
   const effectiveRouteId = displayRoutes.some(route => route.id === selectedRouteId)
@@ -363,6 +375,7 @@ export default function PassengerWorkspace() {
                     selectedRouteId={effectiveRouteId}
                      onClick={handleRouteSelect}
                      getActiveBusesCount={(routeId) => activeBuses.filter(b => b.routeId === routeId).length}
+                     getAvailableBusesCount={(routeId) => availableBuses.filter(b => b.routeId === routeId).length}
                      getDirectionState={(routeId) => normalizeRideDirection(
                        activeBuses.find((bus) => bus.routeId === routeId)?.direction,
                      )}

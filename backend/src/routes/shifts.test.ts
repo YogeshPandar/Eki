@@ -121,6 +121,12 @@ vi.mock("../lib/firebaseAdmin", () => {
               };
               harness.eventLog.push("firestore");
             }
+            if (typedRef.collectionName === "ride_sessions") {
+              harness.session = {
+                ...(harness.session ?? {}),
+                ...(data as Record<string, unknown>),
+              };
+            }
             harness.docSets.push({
               id: typedRef.id ?? "lock",
               data: data as Record<string, unknown>,
@@ -132,8 +138,14 @@ vi.mock("../lib/firebaseAdmin", () => {
               data: data as Record<string, unknown>,
             });
           },
-          delete: async () => {
-            harness.lock = null;
+          delete: async (ref) => {
+            const typedRef = ref as { collectionName?: string };
+            if (typedRef.collectionName === "active_rides") {
+              harness.activeRide = null;
+            }
+            if (typedRef.collectionName === "_active_bus_locks") {
+              harness.lock = null;
+            }
           },
         });
       },
@@ -229,6 +241,123 @@ async function startShift(
     body: JSON.stringify({ busId: "bus_1", routeId: "route_1", driverId, ...extra }),
   });
 }
+
+async function stopShift() {
+  return fetch(`${baseUrl}/api/shifts/stop`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      busId: "bus_1",
+      routeId: "route_1",
+      driverId: "driver_1",
+      sessionId: "session_live",
+    }),
+  });
+}
+
+describe("manual shift termination", () => {
+  beforeEach(() => {
+    harness.session = {
+      status: "active",
+      busId: "bus_1",
+      routeId: "route_1",
+      driverId: "driver_1",
+    };
+    harness.activeRide = {
+      status: "active",
+      sessionId: "session_live",
+      busId: "bus_1",
+      routeId: "route_1",
+      driverId: "driver_1",
+    };
+    harness.lock = {
+      sessionId: "session_live",
+      busId: "bus_1",
+      routeId: "route_1",
+      driverId: "driver_1",
+    };
+    harness.liveNode = {
+      status: "active",
+      deviceState: "online",
+      sessionId: "session_live",
+      busId: "bus_1",
+      routeId: "route_1",
+      driverId: "driver_1",
+      direction: "forward",
+      directionState: "resolved",
+      tripState: "in_service",
+      currentStopIndex: 1,
+      activeRouteId: "route_1:reroute:2",
+      lat: 23.1,
+      lng: 72.6,
+      timestamp: Date.now(),
+      motionState: "stopped",
+    };
+  });
+
+  it("records an interrupted history row and retires only the matching live lifecycle", async () => {
+    const response = await stopShift();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      stopped: true,
+      interrupted: true,
+      alreadyInterrupted: false,
+    });
+    expect(harness.session).toMatchObject({
+      status: "interrupted",
+      interruptionReason: "manual_end_early",
+      interruptedBy: "driver_uid",
+    });
+    expect(typeof harness.session?.endTime).toBe("number");
+    expect(harness.activeRide).toBeNull();
+    expect(harness.lock).toBeNull();
+    expect(harness.liveNode).toMatchObject({
+      status: "offline",
+      deviceState: "online",
+      busId: "bus_1",
+      routeId: "route_1",
+      lat: 23.1,
+      lng: 72.6,
+    });
+    expect(harness.liveNode).not.toHaveProperty("sessionId");
+    expect(harness.liveNode).not.toHaveProperty("tripState");
+    expect(harness.liveNode).not.toHaveProperty("activeRouteId");
+  });
+
+  it("is idempotent and repairs a lingering matching live node", async () => {
+    harness.session!.status = "interrupted";
+    harness.activeRide = null;
+    harness.lock = null;
+
+    const response = await stopShift();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      alreadyInterrupted: true,
+    });
+    expect(harness.liveNode).not.toHaveProperty("sessionId");
+  });
+
+  it("does not retire a replacement session that won the route key", async () => {
+    harness.liveNode.sessionId = "replacement_session";
+
+    const response = await stopShift();
+
+    expect(response.status).toBe(200);
+    expect(harness.liveNode.sessionId).toBe("replacement_session");
+  });
+
+  it("keeps natural completion terminal and idempotent", async () => {
+    harness.session!.status = "completed";
+
+    const response = await stopShift();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ alreadyCompleted: true });
+    expect(harness.liveNode.sessionId).toBe("session_live");
+  });
+});
 
 describe("shift delay updates", () => {
   beforeEach(() => {

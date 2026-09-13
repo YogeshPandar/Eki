@@ -260,7 +260,8 @@ describe("production security configuration", () => {
     expect(messagingPanel).toContain("limitToLast(200)");
     expect(messagingPanel).toContain("requestId: pending.requestId");
     expect(messagingPanel).not.toContain("currentUserName");
-    expect(feedbackPage).toContain("/api/feedback/${id}/status");
+    expect(feedbackPage).toContain("/api/feedback/${encodeURIComponent(id)}/status");
+    expect(feedbackPage).toContain("apiRequest(");
     expect(feedbackPage).not.toContain("updateDoc(");
   });
 
@@ -752,11 +753,12 @@ describe("production security configuration", () => {
 
     expect(server).toContain('app.use("/api/shifts"');
     expect(operations).toContain("/api/shifts/start");
-    expect(operations).not.toContain("/api/shifts/stop");
+    expect(operations).toContain("/api/shifts/stop");
     expect(operations).not.toContain("arrayUnion(");
     expect(operations).not.toContain("test_bus_1");
     expect(shifts).toContain("nodeRef.transaction");
-    expect(shifts).toContain("final ordered stop");
+    expect(shifts).toContain('interruptionReason: "manual_end_early"');
+    expect(shifts).toContain("retireRideLifecycle");
     expect(shifts).toContain("inferRideDirectionFromTelemetry");
     expect(shifts).toContain("directionState");
     expect(operations).not.toContain('ariaLabel="Travel direction"');

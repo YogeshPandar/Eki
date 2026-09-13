@@ -37,7 +37,6 @@ describe("route stop save payload", () => {
       routeId: "",
       name: "  Shilp House to Club O7  ",
       color: "#3B82F6",
-      type: "circular",
       stops: [
         { id: "stop-search", name: "Shilp House", lat: 23.0278, lng: 72.5067 },
         { id: "stop-map", name: "Club O7", lat: 22.991234, lng: 72.471234 },
@@ -52,7 +51,6 @@ describe("route stop save payload", () => {
         mode: "create",
         name: "Shilp House to Club O7",
         color: "#3B82F6",
-        type: "circular",
         stops: [
           { id: "stop-search", name: "Shilp House", shortName: "Shilp House", lat: 23.0278, lng: 72.5067 },
           { id: "stop-map", name: "Club O7", shortName: "Club O7", lat: 22.991234, lng: 72.471234 },
@@ -67,7 +65,6 @@ describe("route stop save payload", () => {
       routeId: "route-test",
       name: "Test route",
       color: "#10B981",
-      type: "up",
       stops: [
         { id: "stop-a", name: "A", lat, lng: 72.5 },
         { id: "stop-b", name: "B", lat: 23, lng: 72.6 },
@@ -83,7 +80,6 @@ describe("route stop save payload", () => {
       routeId: "route-test",
       name: "Test route",
       color: "#10B981",
-      type: "down",
       stops: [
         { id: "same", name: "A", lat: 23, lng: 72.5 },
         { id: "same", name: "B", lat: 23.1, lng: 72.6 },

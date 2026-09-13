@@ -222,11 +222,15 @@ inline uint32_t retryDelayMs(uint8_t consecutiveFailures, uint32_t jitter) {
   );
 }
 
-// Transport recovery should not hide a recovered connection behind a 30s
-// server-failure backoff. This remains at most one attempt per second, below
-// the verified 90/minute device budget. Explicit server delays take precedence.
+// A single read timeout already consumes up to 1.5s. Retry the retained latest
+// fix quickly once so a transient socket expiry does not become a 4-5s RTDB
+// gap. Repeated transport failures return to a 1-2s cadence to avoid a tight
+// reconnect loop. Explicit server delays still take precedence.
 inline uint32_t deliveryRetryDelayMs(uint8_t failures, uint32_t jitter, bool transportFailure) {
-  return transportFailure ? 1000 + jitter % 1000 : retryDelayMs(failures, jitter);
+  if (!transportFailure) return retryDelayMs(failures, jitter);
+  return failures == 0
+    ? 250 + jitter % 500
+    : 1000 + jitter % 1000;
 }
 
 /**

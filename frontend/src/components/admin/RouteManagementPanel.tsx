@@ -12,7 +12,6 @@ import {
   Pencil, Save,
   ChevronDown, ChevronUp, ArrowLeft, ArrowLeftRight, Crosshair,
 } from "lucide-react";
-import CustomSelect from "@/components/ui/CustomSelect";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import AlertModal from "@/components/ui/AlertModal";
 import { MAP_OPTIONS, MAPS_MAP_ID, DEFAULT_CENTER } from "@/config/maps";
@@ -27,15 +26,10 @@ import {
   stopShortName,
   swapRouteEndpoints,
 } from "@/lib/routeStopPayload";
+import { stopLabel } from "@/lib/stopLabel";
 
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────── */
-function stopLabel(i: number): string {
-  const a = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (i < 26) return a[i];
-  return a[Math.floor(i / 26) - 1] + a[i % 26];
-}
-
 const ROUTE_COLORS = [
   "#3B82F6", "#10B981", "#F59E0B", "#EF4444",
   "#8B5CF6", "#EC4899", "#14B8A6", "#F97316",
@@ -199,9 +193,6 @@ function RouteCard({ route, onEdit, onDelete }: { route: RouteData; onEdit: () =
           {route.stops?.length ?? 0} Stops
           {stopsOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
         </button>
-        {route.type && (
-          <span className="px-2 py-0.5 rounded-full bg-white/5 text-[9px] font-black text-white/30 uppercase">{route.type}</span>
-        )}
         {route.distanceMeters && (
           <span className="text-[9px] text-white/20 tabular-nums">{(route.distanceMeters / 1000).toFixed(1)} km</span>
         )}
@@ -228,15 +219,19 @@ function RouteCard({ route, onEdit, onDelete }: { route: RouteData; onEdit: () =
 }
 
 /* â”€â”€ Stop list item (draggable in editor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-function StopItem({ stop, index, onRemove, onNameChange }: {
+function StopItem({ stop, index, onRemove, onNameChange, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: {
   stop: RouteStop; index: number;
   onRemove: (i: number) => void;
   onNameChange: (i: number, name: string) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(stop.name);
   return (
-    <div className="flex items-center gap-2 group">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-1 sm:flex-nowrap">
       <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 font-black text-[9px] flex items-center justify-center shrink-0">
         {stopLabel(index)}
       </span>
@@ -263,9 +258,17 @@ function StopItem({ stop, index, onRemove, onNameChange }: {
           </span>
         </button>
       )}
-      <button onClick={() => onRemove(index)} aria-label={`Remove stop ${stop.name}`} className="w-11 h-11 rounded-lg text-white/15 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all shrink-0">
-        <X className="w-3.5 h-3.5" />
-      </button>
+      <div className="ml-8 flex shrink-0 items-center gap-1 sm:ml-0">
+        <button type="button" onClick={onMoveUp} disabled={!canMoveUp} aria-label={`Move stop ${stop.name} up`} className="size-11 rounded-lg text-white/65 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:text-white/30">
+          <ChevronUp className="mx-auto size-4" aria-hidden="true" />
+        </button>
+        <button type="button" onClick={onMoveDown} disabled={!canMoveDown} aria-label={`Move stop ${stop.name} down`} className="size-11 rounded-lg text-white/65 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:text-white/30">
+          <ChevronDown className="mx-auto size-4" aria-hidden="true" />
+        </button>
+        <button type="button" onClick={() => onRemove(index)} aria-label={`Remove stop ${stop.name}`} className="size-11 rounded-lg text-red-300/80 hover:bg-red-500/10 hover:text-red-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400">
+          <X className="mx-auto size-4" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -278,7 +281,6 @@ interface EditorState {
   routeId: string;
   name: string;
   color: string;
-  type: "up" | "down" | "circular";
   stops: RouteStop[];
   polyline?: string;
   configVersion: number;
@@ -289,7 +291,6 @@ const EMPTY_EDITOR: EditorState = {
   routeId: "",
   name: "",
   color: "#3B82F6",
-  type: "circular",
   stops: [],
   configVersion: 0,
 };
@@ -492,20 +493,6 @@ function RouteEditor({
           <PlacesSearchBox onPlaceSelect={handlePlaceSelect} />
         </div>
 
-        <div className="flex flex-col gap-1 min-w-[110px]">
-          <label className="text-[9px] text-white/30 font-black uppercase tracking-widest px-1">Type</label>
-          <CustomSelect
-            ariaLabel="Route type"
-            value={state.type}
-            onChange={(val) => setField("type", val as EditorState["type"])}
-            options={[
-              { value: "circular", label: "Circular" },
-              { value: "up", label: "Up" },
-              { value: "down", label: "Down" },
-            ]}
-          />
-        </div>
-
         <div className="flex flex-col gap-1">
           <label className="text-[9px] text-white/30 font-black uppercase tracking-widest px-1">Colour</label>
           <div className="flex items-center gap-1.5 h-11">
@@ -640,28 +627,16 @@ function RouteEditor({
             ) : (
               state.stops.map((stop, i) => (
                 <div key={stop.id}>
-                  <StopItem stop={stop} index={i} onRemove={removeStop} onNameChange={renameStop} />
-                  <div className="flex items-center gap-1.5 pl-6 my-0.5">
-                    <div className="w-px h-4 bg-emerald-500/15 mx-2" />
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveStop(i, i - 1)}
-                        disabled={i === 0}
-                        className="w-5 h-5 rounded hover:bg-white/5 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Move up"
-                      >
-                        <ChevronUp className="w-3 h-3 text-white/20" />
-                      </button>
-                      <button
-                        onClick={() => moveStop(i, i + 1)}
-                        disabled={i === state.stops.length - 1}
-                        className="w-5 h-5 rounded hover:bg-white/5 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Move down"
-                      >
-                        <ChevronDown className="w-3 h-3 text-white/20" />
-                      </button>
-                    </div>
-                  </div>
+                  <StopItem
+                    stop={stop}
+                    index={i}
+                    onRemove={removeStop}
+                    onNameChange={renameStop}
+                    onMoveUp={() => moveStop(i, i - 1)}
+                    onMoveDown={() => moveStop(i, i + 1)}
+                    canMoveUp={i > 0}
+                    canMoveDown={i < state.stops.length - 1}
+                  />
                 </div>
               ))
             )}
@@ -707,7 +682,6 @@ export default function RouteManagementPanel() {
       routeId: route.id,
       name: route.name,
       color: route.color || "#3B82F6",
-      type: (route.type as EditorState["type"]) || "circular",
       stops: route.stops ?? [],
       polyline: route.polyline,
       configVersion: Number.isSafeInteger(route.configVersion)

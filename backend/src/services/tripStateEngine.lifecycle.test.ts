@@ -92,6 +92,18 @@ async function flushMicrotasks(turns = 20): Promise<void> {
   for (let index = 0; index < turns; index += 1) await Promise.resolve();
 }
 
+function allowCompletion(sessionId: string): void {
+  mocks.transactionGet.mockImplementation(async (ref: { collectionName?: string }) => {
+    if (ref.collectionName === "_active_bus_locks") {
+      return { exists: true, data: () => ({ sessionId }) };
+    }
+    if (ref.collectionName === "ride_sessions") {
+      return { exists: true, data: () => ({ status: "active" }) };
+    }
+    return { exists: false, data: () => undefined };
+  });
+}
+
 describe("trip-state engine lifecycle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -125,6 +137,7 @@ describe("trip-state engine lifecycle", () => {
   });
 
   it("runs pending completion retirement immediately during shutdown", async () => {
+    allowCompletion("session-1");
     const stop = startTripStateEngine();
     mocks.routeListeners[0].next({
       docChanges: () => [{
@@ -188,6 +201,61 @@ describe("trip-state engine lifecycle", () => {
       { merge: true },
     );
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not overwrite a concurrent manual interruption with stale completion", async () => {
+    mocks.transactionGet.mockImplementation(async (ref: { collectionName?: string }) => {
+      if (ref.collectionName === "_active_bus_locks") {
+        return { exists: true, data: () => ({ sessionId: "session-1" }) };
+      }
+      if (ref.collectionName === "ride_sessions") {
+        return { exists: true, data: () => ({ status: "interrupted" }) };
+      }
+      return { exists: false, data: () => undefined };
+    });
+    const stop = startTripStateEngine();
+    mocks.routeListeners[0].next({
+      docChanges: () => [{
+        type: "added",
+        doc: {
+          id: "route_2",
+          data: () => ({
+            stops: [
+              { id: "origin", name: "Origin", lat: 23, lng: 72 },
+              { id: "destination", name: "Destination", lat: 23.1, lng: 72.1 },
+            ],
+          }),
+        },
+      }],
+    });
+    const liveTransaction = vi.fn();
+
+    mocks.rtdbHandlers.get("child_changed")!({
+      key: "bus_1_route_2",
+      val: () => ({
+        busId: "bus_1",
+        routeId: "route_2",
+        driverId: "driver-1",
+        sessionId: "session-1",
+        direction: "forward",
+        status: "active",
+        tripState: "in_service",
+        currentStopIndex: 0,
+        lat: 23.1,
+        lng: 72.1,
+        timestamp: 1,
+      }),
+      ref: { update: vi.fn(), transaction: liveTransaction },
+    });
+    await flushMicrotasks();
+
+    expect(liveTransaction).not.toHaveBeenCalled();
+    expect(mocks.transactionSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ collectionName: "completed_trips" }),
+      expect.anything(),
+      expect.anything(),
+    );
+    await stop();
   });
 
   it("negative-caches a missing route across telemetry updates", async () => {
@@ -299,6 +367,7 @@ describe("trip-state engine lifecycle", () => {
   });
 
   it("does not retire a replacement session when completion cleanup already started", async () => {
+    allowCompletion("session-1");
     const stop = startTripStateEngine();
     mocks.routeListeners[0].next({
       docChanges: () => [{
@@ -374,6 +443,7 @@ describe("trip-state engine lifecycle", () => {
   });
 
   it("keeps a completed route cleanup when another route starts", async () => {
+    allowCompletion("session-old");
     const stop = startTripStateEngine();
     mocks.routeListeners[0].next({
       docChanges: () => ["route_old", "route_new"].map((id) => ({

@@ -48,6 +48,43 @@ async function releaseActiveBusLock(busId: string, sessionId: string): Promise<v
   });
 }
 
+function retireRideLifecycle(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  const retired = withoutLiveRouteContext(value);
+  for (const field of [
+    "sessionId",
+    "driverId",
+    "direction",
+    "directionState",
+    "directionEndpointVersion",
+    "directionFirestoreSynced",
+    "originStopId",
+    "destinationStopId",
+    "tripState",
+    "currentStopIndex",
+    "hasDepartedOrigin",
+    "delayMinutes",
+    "delayUpdatedAt",
+    "automaticTurnaround",
+    "previousSessionId",
+    "completedAt",
+    "turnaroundEligibleAt",
+    "turnaroundSampledAt",
+    "turnaroundClaimId",
+    "turnaroundClaimedAt",
+    "passengers",
+    "stopsReached",
+  ]) {
+    delete retired[field];
+  }
+  return {
+    ...retired,
+    status: "offline",
+    lifecycleUpdatedAt: { ".sv": "timestamp" },
+  };
+}
+
 type AuthenticatedRequest = Request & {
   user?: {
     uid: string;
@@ -670,8 +707,79 @@ router.post("/stop", requireAuth, async (req: AuthenticatedRequest, res: Respons
       res.json({ stopped: true, alreadyCompleted: true });
       return;
     }
-    res.status(409).json({
-      error: "This ride ends automatically after the final ordered stop.",
+    const activeRideRef = db.collection("active_rides")
+      .doc(activeRideId(assignment.busId, assignment.routeId));
+    const lockRef = activeBusLockRef(assignment.busId);
+    const endedAt = Date.now();
+    const outcome = await db.runTransaction(async (transaction) => {
+      const [currentSession, activeRide, lock] = await Promise.all([
+        transaction.get(sessionRef),
+        transaction.get(activeRideRef),
+        transaction.get(lockRef),
+      ]);
+      const current = currentSession.data();
+      if (
+        !currentSession.exists ||
+        current?.driverId !== assignment.driverId ||
+        current?.busId !== assignment.busId ||
+        current?.routeId !== assignment.routeId
+      ) {
+        return "missing" as const;
+      }
+      if (current.status === "completed") return "completed" as const;
+      if (current.status !== "interrupted") {
+        if (
+          current.status !== "pending" &&
+          current.status !== "armed" &&
+          current.status !== "active"
+        ) {
+          return "terminal" as const;
+        }
+        transaction.set(sessionRef, {
+          status: "interrupted",
+          endTime: endedAt,
+          interruptionReason: "manual_end_early",
+          interruptedBy: req.user?.uid ?? null,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+      if (activeRide.data()?.sessionId === sessionId) {
+        transaction.delete(activeRideRef);
+      }
+      if (lock.data()?.sessionId === sessionId) {
+        transaction.delete(lockRef);
+      }
+      return current.status === "interrupted"
+        ? "already-interrupted" as const
+        : "interrupted" as const;
+    });
+
+    if (outcome === "missing") {
+      res.status(404).json({ error: "Active shift was not found." });
+      return;
+    }
+    if (outcome === "completed") {
+      res.json({ stopped: true, alreadyCompleted: true });
+      return;
+    }
+    if (outcome === "terminal") {
+      res.status(409).json({ error: "This ride is already in a terminal state." });
+      return;
+    }
+
+    const nodeRef = rtdb.ref(
+      `activeBuses/${activeRideId(assignment.busId, assignment.routeId)}`,
+    );
+    await nodeRef.transaction((currentValue) => {
+      if (!currentValue || typeof currentValue !== "object") return;
+      const current = currentValue as Record<string, unknown>;
+      if (current.sessionId !== sessionId) return;
+      return retireRideLifecycle(current);
+    });
+    res.json({
+      stopped: true,
+      interrupted: true,
+      alreadyInterrupted: outcome === "already-interrupted",
     });
   } catch (error) {
     console.error("[Shifts] Failed to stop shift:", error);

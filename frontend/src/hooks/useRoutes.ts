@@ -16,7 +16,6 @@ export interface RouteStop {
 export interface RouteData {
   id: string;
   name: string; // e.g. "1A"
-  type?: "up" | "down" | "circular";
   color: string;
   waypoints: RouteWaypoint[];
   stops: RouteStop[];

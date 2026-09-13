@@ -20,7 +20,6 @@ import { invalidatePlanRoute } from "./plan";
 const router = Router();
 const SAFE_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const SAFE_COLOR = /^#[0-9a-fA-F]{6}$/;
-const ROUTE_TYPES = new Set(["up", "down", "circular"]);
 const STORED_POLYLINE_QUALITY = "HIGH_QUALITY";
 const ROUTE_SAVE_LEASE_MS = 30_000;
 const SAFE_OPERATION_ID = /^[A-Za-z0-9_-]{1,128}$/;
@@ -524,7 +523,6 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
   const routeId = singleRouteParam(req.params.routeId);
   const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
   const color = typeof req.body?.color === "string" ? req.body.color : "";
-  const type = req.body?.type;
   const mode = req.body?.mode;
   const saveId = typeof req.body?.saveId === "string" ? req.body.saveId : "";
   const expectedVersion = req.body?.expectedVersion;
@@ -535,7 +533,6 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
     !name ||
     name.length > 100 ||
     !SAFE_COLOR.test(color) ||
-    !ROUTE_TYPES.has(type) ||
     (mode !== "create" && mode !== "edit") ||
     !SAFE_OPERATION_ID.test(saveId) ||
     !Number.isSafeInteger(expectedVersion) ||
@@ -566,7 +563,6 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
     expectedVersion,
     name,
     color,
-    type,
     stops,
   });
   const leaseOwner = randomBytes(16).toString("hex");
@@ -706,7 +702,6 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
       id: routeId,
       name,
       color,
-      type,
       stops,
       waypoints,
       ...geometry,

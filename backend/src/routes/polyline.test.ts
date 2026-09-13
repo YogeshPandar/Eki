@@ -202,7 +202,6 @@ function routeBody(overrides: Row = {}): Row {
     mode: "edit",
     name: "Updated",
     color: "#10B981",
-    type: "up",
     stops,
     expectedVersion: 1,
     saveId: "save-1",
@@ -246,6 +245,17 @@ describe("transactional route saves", () => {
       geometryReused: true,
     });
     expect(upstream).not.toHaveBeenCalled();
+    expect(harness.routes.get("route-1")).not.toHaveProperty("type");
+  });
+
+  it("ignores obsolete route type input and does not persist it", async () => {
+    harness.routes.set("route-1", storedRoute());
+    mockRoutesApi();
+
+    const response = await save(routeBody({ type: "legacy-client-value" }));
+
+    expect(response.status).toBe(200);
+    expect(harness.routes.get("route-1")).not.toHaveProperty("type");
   });
 
   it("recomputes both directions after a coordinate edit", async () => {

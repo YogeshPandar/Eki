@@ -341,6 +341,7 @@ function FleetCard({
   entry, buses, routes, drivers,
   onSelect, selected, onChangeDelay, delayPending, boardingCode,
   onLoadBoardingCode, onOpenChat, canChat,
+  onEndRide,
 }: {
   entry: ActiveBusEntry;
   buses: ReturnType<typeof useBuses>["buses"];
@@ -354,6 +355,7 @@ function FleetCard({
   onLoadBoardingCode: (entry: ActiveBusEntry) => void;
   onOpenChat: (entry: ActiveBusEntry) => void;
   canChat: boolean;
+  onEndRide: (entry: ActiveBusEntry) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -366,6 +368,13 @@ function FleetCard({
   const ms = MOTION_STATE[entry.motionState ?? "uncertain"] ?? MOTION_STATE.uncertain;
   const stopIdx = (entry.currentStopIndex ?? 0) + 1;
   const stopCount = directedRoute?.stops?.length ?? 0;
+  const serviceState = rideServiceState(entry);
+  const canEndRide = Boolean(
+    entry.sessionId && entry.driverId && entry.routeId &&
+    (serviceState === "direction_pending" ||
+      serviceState === "pre_departure" ||
+      serviceState === "in_service"),
+  );
 
   return (
     <>
@@ -518,6 +527,16 @@ function FleetCard({
                 <TicketCheck className="size-4" />
                 {boardingCode ? `${boardingCode.slice(0, 4)}-${boardingCode.slice(4)}` : "Boarding code"}
               </button>
+              {canEndRide && (
+                <button
+                  type="button"
+                  onClick={() => onEndRide(entry)}
+                  className="flex min-h-10 items-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 text-xs font-bold text-red-300 hover:bg-red-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  End ride early
+                </button>
+              )}
             </div>
             {hasValidBusCoordinates(entry.lat, entry.lng) && (
               <p className="text-[9px] text-white/20 tabular-nums">
@@ -614,6 +633,8 @@ export default function DashboardPanel() {
   const [delayPending, setDelayPending] = useState("");
   const [boardingCodes, setBoardingCodes] = useState<Record<string, string>>({});
   const [chatEntry, setChatEntry] = useState<ActiveBusEntry | null>(null);
+  const [endRideEntry, setEndRideEntry] = useState<ActiveBusEntry | null>(null);
+  const [endRidePending, setEndRidePending] = useState(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => setFreshnessNow(Date.now()), 15_000);
@@ -698,10 +719,10 @@ export default function DashboardPanel() {
       const inferredDirection = normalizeRideDirection(result.direction);
       setArmStatus(
         result.resumed
-          ? `Active ride restored (${result.sessionId}).`
+          ? `Active service restored (${result.sessionId}).`
           : inferredDirection === "pending"
-            ? `Ride armed (${result.sessionId}); direction pending.`
-            : `Ride armed (${result.sessionId}) for ${directionLabelState(inferredDirection, routes.find((route) => route.id === routeId)?.stops ?? [])}.`,
+            ? `Service started (${result.sessionId}); direction pending.`
+            : `Service started (${result.sessionId}) for ${directionLabelState(inferredDirection, routes.find((route) => route.id === routeId)?.stops ?? [])}.`,
       );
     } catch (error) {
       setArmStatus(errorMessage(error));
@@ -748,8 +769,32 @@ export default function DashboardPanel() {
     }
   };
 
+  const endRideEarly = async () => {
+    const entry = endRideEntry;
+    if (!entry?.sessionId || !entry.routeId || !entry.driverId) return;
+    setEndRidePending(true);
+    setArmStatus("");
+    try {
+      await requestAdmin("/api/shifts/stop", {
+        method: "POST",
+        body: JSON.stringify({
+          busId: entry.busId,
+          routeId: entry.routeId,
+          driverId: entry.driverId,
+          sessionId: entry.sessionId,
+        }),
+      });
+      setArmStatus(`Ride ${entry.sessionId} ended early and was saved to history.`);
+      setEndRideEntry(null);
+    } catch (error) {
+      setArmStatus(errorMessage(error));
+    } finally {
+      setEndRidePending(false);
+    }
+  };
+
   return (
-    <div className="relative h-full flex flex-col lg:flex-row w-full overflow-y-auto lg:overflow-hidden">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden lg:flex-row">
       {/* â”€â”€ Map â”€â”€ */}
       <div className="flex-1 relative min-h-[300px] lg:min-h-0">
         <GoogleMap
@@ -825,12 +870,12 @@ export default function DashboardPanel() {
       </div>
 
       {/* â”€â”€ Sidebar â”€â”€ */}
-      <div className="w-full lg:w-[360px] shrink-0 flex flex-col border-t lg:border-t-0 lg:border-l border-white/5 overflow-hidden">
+      <div className="flex max-h-[55%] min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-white/5 lg:max-h-none lg:w-[360px] lg:border-l lg:border-t-0">
         <section className="shrink-0 border-b border-white/5 p-3">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-white">Arm a ride</h2>
-              <p className="mt-0.5 text-[10px] text-white/35">GNSS starts and completes the ride automatically.</p>
+              <h2 className="text-sm font-bold text-white">Start service</h2>
+              <p className="mt-0.5 text-[10px] text-white/35">Create the protected ride session. GNSS controls movement and completion.</p>
             </div>
             <Play className="size-4 text-white/30" aria-hidden="true" />
           </div>
@@ -869,8 +914,8 @@ export default function DashboardPanel() {
             />
           </div>
           <p className="text-xs text-white/45">
-            Travel direction is inferred from fresh stopped GPS at route endpoint A or Z.
-            After completion, the opposite trip is armed automatically following the turnaround dwell.
+            Travel direction is inferred from fresh stopped GPS at the first or last stop.
+            After completion, the return service starts automatically following the turnaround dwell.
           </p>
           <button
             type="button"
@@ -879,7 +924,7 @@ export default function DashboardPanel() {
             className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-xs font-bold text-black disabled:cursor-not-allowed disabled:opacity-40"
           >
             {armPending ? <RefreshCw className="size-4 animate-spin" /> : <Play className="size-4" />}
-            Arm ride
+            Start service
           </button>
           {armStatus && <p className="mt-2 text-xs text-white/65" role="status">{armStatus}</p>}
         </section>
@@ -901,7 +946,7 @@ export default function DashboardPanel() {
         </div>
 
         {/* Fleet list */}
-        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain p-3">
           <p className="text-[9px] font-black uppercase tracking-[0.25em] text-white/25 px-1">Live Fleet</p>
           {activeEntries.length === 0 ? (
             <div className={`flex flex-col items-center justify-center py-16 text-center gap-2 ${isResuming ? "text-amber-300" : "opacity-30"}`}>
@@ -926,6 +971,7 @@ export default function DashboardPanel() {
                 onLoadBoardingCode={(ride) => void loadBoardingCode(ride)}
                 onOpenChat={setChatEntry}
                 canChat={Boolean(user?.uid)}
+                onEndRide={setEndRideEntry}
               />
             ))
           )}
@@ -940,11 +986,22 @@ export default function DashboardPanel() {
               currentUserId={user.uid}
               isOverlay
               onClose={() => setChatEntry(null)}
-              unavailableMessage={chatEntry.sessionId ? undefined : "Arm this online bus to create the protected ride chat session."}
+              unavailableMessage={chatEntry.sessionId ? undefined : "Start service for this online bus to create the protected ride chat session."}
             />
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={Boolean(endRideEntry)}
+        title="End ride early?"
+        description="This immediately ends the current service, removes it from passenger tracking, and saves the partial ride in history."
+        confirmText="End ride"
+        cancelText="Keep running"
+        variant="warning"
+        loading={endRidePending}
+        onConfirm={() => void endRideEarly()}
+        onCancel={() => setEndRideEntry(null)}
+      />
     </div>
   );
 }

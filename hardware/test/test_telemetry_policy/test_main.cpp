@@ -90,7 +90,9 @@ void test_telemetry_timing_policy_is_explicit_and_safe() {
 }
 
 void test_retry_backoff_is_jittered_and_bounded() {
-  TEST_ASSERT_EQUAL_UINT32(1000, deliveryRetryDelayMs(6, 0, true));
+  TEST_ASSERT_EQUAL_UINT32(250, deliveryRetryDelayMs(0, 0, true));
+  TEST_ASSERT_EQUAL_UINT32(749, deliveryRetryDelayMs(0, 999, true));
+  TEST_ASSERT_EQUAL_UINT32(1000, deliveryRetryDelayMs(1, 0, true));
   TEST_ASSERT_EQUAL_UINT32(1999, deliveryRetryDelayMs(6, 999, true));
   TEST_ASSERT_EQUAL_UINT32(30000, deliveryRetryDelayMs(6, 999, false));
 

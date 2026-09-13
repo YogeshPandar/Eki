@@ -11,10 +11,11 @@ interface RouteCarouselProps {
   onSwipe?: (id: string) => void;
   onClick: (id: string) => void;
   getActiveBusesCount: (routeId: string) => number;
+  getAvailableBusesCount: (routeId: string) => number;
   getDirectionState: (routeId: string) => RideDirectionState;
 }
 
-export default function RouteCarousel({ routes, selectedRouteId, onClick, getActiveBusesCount, getDirectionState }: RouteCarouselProps) {
+export default function RouteCarousel({ routes, selectedRouteId, onClick, getActiveBusesCount, getAvailableBusesCount, getDirectionState }: RouteCarouselProps) {
   const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
@@ -24,7 +25,9 @@ export default function RouteCarousel({ routes, selectedRouteId, onClick, getAct
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const liveRoutes = routes.filter((route) => getActiveBusesCount(route.id) > 0);
+  const liveRoutes = routes.filter((route) =>
+    getActiveBusesCount(route.id) > 0 || getAvailableBusesCount(route.id) > 0
+  );
 
   if (liveRoutes.length === 0) {
     return (
@@ -38,8 +41,13 @@ export default function RouteCarousel({ routes, selectedRouteId, onClick, getAct
   return (
     <div className="w-full flex flex-col gap-4 pb-4">
       {liveRoutes.map((route) => {
+        const activeCount = getActiveBusesCount(route.id);
+        const availableCount = getAvailableBusesCount(route.id);
+        const hasService = activeCount > 0;
         const directionState = getDirectionState(route.id);
-        const directedRoute = routeInRideDirectionState(route, directionState);
+        const directedRoute = hasService
+          ? routeInRideDirectionState(route, directionState)
+          : null;
         const stops = directedRoute?.stops ?? [];
         const durationMins = directedRoute?.duration
           ? Math.round(parseInt(directedRoute.duration) / 60)
@@ -49,10 +57,14 @@ export default function RouteCarousel({ routes, selectedRouteId, onClick, getAct
           : '--:--';
 
         return (
-          <div
+          <button
+            type="button"
             key={route.id}
-            className="w-full flex items-stretch transition-all duration-300 ease-out cursor-pointer"
-            onClick={() => onClick(route.id)}
+            className="w-full flex items-stretch text-left transition-all duration-300 ease-out disabled:cursor-default"
+            onClick={() => hasService && onClick(route.id)}
+            aria-label={hasService
+              ? `Track ${route.name}`
+              : `${route.name}: ${availableCount} vehicle available, service not started`}
           >
             <div
               className="w-full text-left transition-all duration-300 rounded-[20px] p-5 border relative overflow-hidden flex flex-col min-h-[170px]"
@@ -76,7 +88,7 @@ export default function RouteCarousel({ routes, selectedRouteId, onClick, getAct
                     </p>
                   ) : (
                     <p className="text-[14.5px] font-bold mt-2" style={{ color: "var(--text-secondary)" }}>
-                      Direction pending
+                      {hasService ? "Direction pending" : "Vehicle available — service not started"}
                     </p>
                   )}
                 </div>
@@ -92,12 +104,13 @@ export default function RouteCarousel({ routes, selectedRouteId, onClick, getAct
                   </div>
                   
                   <div className="flex items-baseline gap-1.5 text-[13px] font-black tracking-wider uppercase transition-opacity shrink-0" style={{ color: "var(--accent)" }}>
-                    {directedRoute ? "TRACK ROUTE" : "VIEW STATUS"} <span className="text-[15px]">&rarr;</span>
+                    {directedRoute ? "TRACK ROUTE" : hasService ? "VIEW STATUS" : `${availableCount} AVAILABLE`}
+                    {hasService && <span className="text-[15px]">&rarr;</span>}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </button>
         );
       })}
     </div>

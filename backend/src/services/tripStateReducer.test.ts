@@ -18,7 +18,7 @@ function input(overrides: Partial<Parameters<typeof reduceTripState>[0]> = {}) {
 }
 
 describe("reduceTripState", () => {
-  it("does not complete repeatedly at a circular route origin", () => {
+  it("does not complete repeatedly when a route revisits its origin", () => {
     const stops = [origin, origin];
     const first = reduceTripState(input({ stops }));
     const second = reduceTripState(input({ stops, ...first }));

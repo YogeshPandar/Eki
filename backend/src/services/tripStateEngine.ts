@@ -858,15 +858,31 @@ export function startTripStateEngine(): () => Promise<void> {
       const activeRideId = activeRideDocumentId(data);
       const completedRef = db.collection("completed_trips").doc(completionId);
       try {
-        await db.runTransaction(async (transaction) => {
+        const persistedCompletion = await db.runTransaction(async (transaction) => {
           const activeRideRef = activeRideId
             ? db.collection("active_rides").doc(activeRideId)
             : null;
           const lockRef = db.collection("_active_bus_locks").doc(data.busId);
-          const [activeRide, lock] = await Promise.all([
+          const sessionRef = typeof data.sessionId === "string"
+            ? db.collection("ride_sessions").doc(data.sessionId)
+            : null;
+          const [activeRide, lock, session] = await Promise.all([
             activeRideRef ? transaction.get(activeRideRef) : Promise.resolve(null),
             transaction.get(lockRef),
+            sessionRef ? transaction.get(sessionRef) : Promise.resolve(null),
           ]);
+          if (sessionRef) {
+            const sessionStatus = session?.data()?.status;
+            if (
+              !session?.exists ||
+              lock.data()?.sessionId !== data.sessionId ||
+              (sessionStatus !== "pending" &&
+                sessionStatus !== "armed" &&
+                sessionStatus !== "active")
+            ) {
+              return false;
+            }
+          }
           transaction.set(completedRef, {
             busId: data.busId,
             driverId: data.driverId || "unknown",
@@ -884,7 +900,7 @@ export function startTripStateEngine(): () => Promise<void> {
           }, { merge: true });
           if (typeof data.sessionId === "string") {
             const finalStop = stops[currentStopIndex];
-            transaction.set(db.collection("ride_sessions").doc(data.sessionId), {
+            transaction.set(sessionRef!, {
               status: "completed",
               endTime: Date.now(),
               ...(finalStop
@@ -912,7 +928,11 @@ export function startTripStateEngine(): () => Promise<void> {
           ) {
             transaction.delete(lockRef);
           }
+          return true;
         });
+        // A concurrent manual termination or replacement session won. Do not
+        // overwrite its interrupted history or publish a stale completion.
+        if (!persistedCompletion) return;
         if (activeRideId) {
           activeRideWrites.invalidate(activeRideId);
         }

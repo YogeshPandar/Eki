@@ -1,7 +1,23 @@
 # Stationary readiness checks — 2026-09-13
 
-Baseline: `7614ad5`. The attached admin/passenger brief was used as a QA reference;
-its proposed product changes are not all implemented by this test run.
+Baseline: `7614ad5`; latest implementation is above `30a606a` on `testing`.
+
+## Post-fix RTDB-gap follow-up
+
+The current development firmware changes the first retained-sample transport retry
+from 1–2 seconds to 250–749 ms. Repeated failures remain at 1–2 seconds, so a
+single expired/read-timeout socket recovers sooner without a tight failure loop.
+
+After flashing that image to COM3, a new three-minute stationary capture recorded
+175 accepted requests, no HTTP failures/retries, one TLS connection, and no TLS
+reconnect. HTTP p50/p95/p99/max was 567/1,144/1,320/2,032 ms. Accepted backend
+ingress gaps were 1,004/1,159/2,003/2,382 ms; none exceeded five seconds. The
+full device-only analysis is in [POSTFIX_STATIONARY_TRACE.md](POSTFIX_STATIONARY_TRACE.md).
+
+The authenticated Passenger browser concurrently showed the fresh stopped device
+as “Vehicle available — service not started” without creating a ride direction,
+ETA, session, or tracking marker. A fully correlated listener-to-render trace still
+requires the deferred moving/physical run.
 
 ## Live stationary evidence
 
@@ -67,7 +83,7 @@ active service. This is current lifecycle gating, not a speed-filter failure.
 ```powershell
 npm test
 platformio test --project-dir hardware -e native
-node scripts/check-stationary-runtime.mjs --frontend http://localhost:3000 --backend https://rigging-everglade-tidal.ngrok-free.dev
+node scripts/check-stationary-runtime.mjs --frontend http://localhost:3000 --backend $env:NEXT_PUBLIC_BACKEND_URL
 ```
 
 The runtime script checks frontend/backend reachability, CORS preflight and the
