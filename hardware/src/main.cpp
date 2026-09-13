@@ -2,6 +2,7 @@
 #include "connectivity_policy.h"
 #include "firmware_config.h"
 #include "firmware_update_policy.h"
+#include "http_session.h"
 #include "secrets.h"
 #include "telemetry_policy.h"
 #include "telemetry_queue.h"
@@ -28,6 +29,10 @@
 #include <cstring>
 #include <limits>
 #include <sys/time.h>
+
+#ifndef EKI_TRANSPORT_METRICS
+#define EKI_TRANSPORT_METRICS 0
+#endif
 
 #ifndef EKI_FLEET_BUILD
 #define EKI_FLEET_BUILD 0
@@ -87,6 +92,7 @@ constexpr uint32_t GNSS_UTC_MAX_AGE_MS = 2000;
 constexpr uint32_t GNSS_EPOCH_REFERENCE_MAX_AGE_MS = 24UL * 60 * 60 * 1000;
 constexpr uint32_t NTP_CROSS_CHECK_INTERVAL_MS = 6UL * 60 * 60 * 1000;
 constexpr uint32_t HTTP_TIMEOUT_MS = 7000;
+constexpr uint32_t TLS_HANDSHAKE_TIMEOUT_SECONDS = (HTTP_TIMEOUT_MS + 999) / 1000;
 constexpr uint32_t WATCHDOG_TIMEOUT_MS = 25000;
 // TelemetryFix grew when receiver HDOP and monotonic sequencing were added.
 // Keep the retained ring below the 6 KiB RTC-state budget with reset stats.
@@ -122,6 +128,8 @@ TinyGPSPlus gps;
 HardwareSerial &gpsSerial = Serial2;
 WiFiClientSecure tlsClient;
 WiFiClient plainClient;
+/* only the publisher task uses this session after setup. */
+HTTPClient backendHttp;
 #if EKI_FLEET_BUILD
 WiFiClientSecure firmwareTlsClient;
 #endif
@@ -1108,11 +1116,12 @@ PublishResult publishFix(const TelemetryFix &fix) {
     return PublishResult::Dropped;
   }
 
-  HTTPClient http;
-  http.setConnectTimeout(HTTP_TIMEOUT_MS);
-  http.setTimeout(HTTP_TIMEOUT_MS);
+  /* a request-local client would close the reusable socket on destruction. */
+  HTTPClient &http = backendHttp;
   http.setReuse(true);
   if (!http.begin(getNetworkClient(), telemetryEndpoint)) {
+    getNetworkClient().stop();
+    http.end();
     Serial.println("[HTTPS] Unable to initialize telemetry request.");
     scheduleHttpsRetry();
     return eki::telemetry::retryKeepsSampleFresh(
@@ -1122,28 +1131,55 @@ PublishResult publishFix(const TelemetryFix &fix) {
       eki::telemetry::TELEMETRY_FRESHNESS_MARGIN_MS
     ) ? PublishResult::RetryLatest : PublishResult::Dropped;
   }
-  const char *responseHeaders[] = {"Retry-After"};
-  http.collectHeaders(responseHeaders, 1);
   http.addHeader("Authorization", authorizationHeader);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Cache-Control", "no-store");
 
+#if EKI_TRANSPORT_METRICS
+  const bool socketOpenBefore = getNetworkClient().connected();
+#endif
   const uint32_t startedAt = millis();
   const int responseCode = http.POST(
     reinterpret_cast<uint8_t *>(payload),
     payloadLength
   );
+#if EKI_TRANSPORT_METRICS
+  const uint32_t headersMs = elapsed(startedAt);
+#endif
   const eki::telemetry::HttpResponseAction action =
     eki::telemetry::httpResponseAction(responseCode);
   const uint32_t retryAfterMs = responseCode == 429
     ? eki::telemetry::retryAfterDelayMs(http.header("Retry-After").c_str())
     : 0;
+  /* end() alone does not consume a fragmented response on the secure client. */
+  const bool reusable = eki::http::finishResponse(
+    http,
+    getNetworkClient(),
+    action == eki::telemetry::HttpResponseAction::Accept,
+    []() -> uint32_t { return millis(); },
+    []() { delay(1); }
+  );
+  const uint32_t requestMs = elapsed(startedAt);
+#if EKI_TRANSPORT_METRICS
+  /* socket state is a reuse candidate, not proof of tls session resumption. */
+  Serial.printf(
+    "[Transport] seq=%lu status=%d socket_open_before=%u headers_ms=%lu total_ms=%lu reusable=%u\n",
+    static_cast<unsigned long>(fix.sequence),
+    responseCode,
+    static_cast<unsigned>(socketOpenBefore),
+    static_cast<unsigned long>(headersMs),
+    static_cast<unsigned long>(requestMs),
+    static_cast<unsigned>(reusable)
+  );
+#else
+  (void)reusable;
+#endif
   if (responseCode < 0) {
     Serial.printf(
       "[HTTPS] Transport failure %d (%s) in %lums (RSSI %d dBm). Check DNS, hostname, CA, clock, and backend reachability.\n",
       responseCode,
       httpTransportFailureName(responseCode),
-      static_cast<unsigned long>(elapsed(startedAt)),
+      static_cast<unsigned long>(requestMs),
       WiFi.RSSI()
     );
   } else if (action != eki::telemetry::HttpResponseAction::Accept) {
@@ -1157,7 +1193,7 @@ PublishResult publishFix(const TelemetryFix &fix) {
             ? "credential-fault"
             : "rejected",
       responseCode,
-      static_cast<unsigned long>(elapsed(startedAt)),
+      static_cast<unsigned long>(requestMs),
       payloadLength,
       WiFi.RSSI()
     );
@@ -1178,9 +1214,7 @@ PublishResult publishFix(const TelemetryFix &fix) {
       Serial.println("[HTTPS] Backend dependency is unavailable; retaining the latest fix.");
     }
   }
-  http.end();
   if (action != eki::telemetry::HttpResponseAction::Accept) {
-    getNetworkClient().stop();
     if (action == eki::telemetry::HttpResponseAction::HaltCredentials) {
       latchCredentialFault();
       return PublishResult::CredentialFault;
@@ -1271,10 +1305,12 @@ void publishRemoteDiagnostic() {
     return;
   }
 
-  HTTPClient http;
-  http.setConnectTimeout(HTTP_TIMEOUT_MS);
-  http.setTimeout(HTTP_TIMEOUT_MS);
+  /* diagnostics must not destroy the warm telemetry connection. */
+  HTTPClient &http = backendHttp;
+  http.setReuse(true);
   if (!http.begin(getNetworkClient(), diagnosticsEndpoint)) {
+    getNetworkClient().stop();
+    http.end();
     Serial.println("[Diagnostics] Unable to initialize remote health request.");
     scheduleRemoteDiagnosticRetry();
     return;
@@ -1287,7 +1323,13 @@ void publishRemoteDiagnostic() {
     reinterpret_cast<uint8_t *>(payload),
     payloadLength
   );
-  http.end();
+  eki::http::finishResponse(
+    http,
+    getNetworkClient(),
+    responseCode >= 200 && responseCode < 300,
+    []() -> uint32_t { return millis(); },
+    []() { delay(1); }
+  );
   if (responseCode == 401 || responseCode == 403) {
     latchCredentialFault();
     Serial.println("[Diagnostics] Credential fault latched; firmware reflash required.");
@@ -1593,14 +1635,23 @@ void setup() {
 
   if (eki::config::backendUrlUsesHttps(BACKEND_URL)) {
     tlsClient.setCACert(BACKEND_ROOT_CA);
+    /* this api takes seconds; the http timeouts use milliseconds. */
+    tlsClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS);
 #if EKI_FLEET_BUILD
     firmwareTlsClient.setCACert(BACKEND_ROOT_CA);
+    firmwareTlsClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS);
 #endif
   }
   if (!initializeRequestStrings()) {
     Serial.println("[Boot] Compile-time request configuration is too long; halted.");
     haltWithStatusLed(2);
   }
+  backendHttp.setConnectTimeout(HTTP_TIMEOUT_MS);
+  backendHttp.setTimeout(HTTP_TIMEOUT_MS);
+  backendHttp.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+  /* allocate the response header table once, not for each telemetry sample. */
+  const char *responseHeaders[] = {"Retry-After", "Transfer-Encoding"};
+  backendHttp.collectHeaders(responseHeaders, 2);
   sntp_set_time_sync_notification_cb(onNtpTimeSynchronized);
   configureWatchdog();
   const BaseType_t taskResult = xTaskCreatePinnedToCore(
