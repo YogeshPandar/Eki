@@ -29,8 +29,9 @@ import {
   type TrackedRide,
 } from "@/lib/rideFeedbackEligibility";
 import {
-  directionLabel,
-  normalizeRideDirection,
+  directionStateLabel,
+  resolvedRideDirection,
+  rideDirectionState,
   routeInRideDirection,
 } from "@/lib/rideDirection";
 import CustomSelect from "@/components/ui/CustomSelect";
@@ -172,8 +173,9 @@ export default function PassengerWorkspace() {
     busesOnRoute[0];
   const activeBusOnRouteId = activeBusOnRoute?.busId;
   const activeSessionId = activeBusOnRoute?.sessionId;
-  const rideDirection = normalizeRideDirection(activeBusOnRoute?.direction);
-  const directedRoute = activeRoute
+  const rideDirection = resolvedRideDirection(activeBusOnRoute?.direction);
+  const rideDirectionStatus = rideDirectionState(activeBusOnRoute?.direction);
+  const directedRoute = activeRoute && rideDirection
     ? routeInRideDirection(activeRoute, rideDirection)
     : undefined;
   const effectiveDestinationStopId =
@@ -433,7 +435,7 @@ export default function PassengerWorkspace() {
                         >
                           {busesOnRoute.map((bus) => (
                             <option key={passengerLiveBusSelectionKey(bus)} value={passengerLiveBusSelectionKey(bus)}>
-                              Bus {bus.busId} · {directionLabel(normalizeRideDirection(bus.direction), activeRoute?.stops ?? [])}
+                              Bus {bus.busId} · {directionStateLabel(rideDirectionState(bus.direction), activeRoute?.stops ?? [])}
                             </option>
                           ))}
                         </select>
@@ -480,12 +482,12 @@ export default function PassengerWorkspace() {
                       )}
                     </div>
                   ) : (
-                    <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5">
+                    <div className="min-w-0 flex-1 flex-col justify-center gap-0.5">
                       <p className="text-[11px] font-semibold uppercase tracking-widest leading-none" style={{ color: "var(--accent)" }}>
                         Live
                       </p>
                       <p className="text-[17px] font-semibold truncate leading-tight" style={{ color: "var(--text-primary)" }}>
-                        {directedRoute.name} · {directionLabel(rideDirection, activeRoute?.stops ?? [])}
+                        {directedRoute.name} · {directionStateLabel(rideDirectionStatus, activeRoute?.stops ?? [])}
                       </p>
                     </div>
                   )}
@@ -559,6 +561,31 @@ export default function PassengerWorkspace() {
                 onClick={() => {
                   setCurrentView("home");
                 }}
+                className="mt-6 px-6 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-95"
+                style={{ background: "rgba(255,255,255,0.1)", color: "white", border: "1px solid rgba(255,255,255,0.05)" }}
+              >
+                Return to Routes
+              </button>
+            </div>
+          ) : activeBusOnRoute && activeRoute && !rideDirection ? (
+            <div
+              className="absolute inset-0 z-30 flex flex-col items-center justify-center px-10 text-center pointer-events-auto"
+              style={{ background: "rgba(9, 9, 11, 0.9)" }}
+              role="status"
+              aria-live="polite"
+            >
+              <AlertCircle className="mb-4 size-8" style={{ color: "var(--text-secondary)" }} />
+              <p className="text-xl font-extrabold tracking-tight mb-2" style={{ color: "var(--text-primary)" }}>
+                Direction pending
+              </p>
+              <p className="max-w-xs text-[13px]" style={{ color: "var(--text-tertiary)" }}>
+                Live device data is available, but this ride has not resolved a travel direction yet. Stops, destination, map route, progress, and ETA will appear after direction is confirmed.
+              </p>
+              <p className="mt-3 text-xs font-semibold" style={{ color: "var(--text-secondary)" }}>
+                Bus {activeBusOnRoute.busId} · {activeRoute.name}
+              </p>
+              <button
+                onClick={() => setCurrentView("home")}
                 className="mt-6 px-6 py-2.5 rounded-xl text-[13px] font-semibold transition-all active:scale-95"
                 style={{ background: "rgba(255,255,255,0.1)", color: "white", border: "1px solid rgba(255,255,255,0.05)" }}
               >

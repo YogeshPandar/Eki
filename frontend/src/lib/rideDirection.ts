@@ -1,6 +1,21 @@
 import type { RouteData } from "@/hooks/useRoutes";
 
 export type RideDirection = "forward" | "reverse";
+export type RideDirectionState = RideDirection | "pending";
+
+export function resolvedRideDirection(value: unknown): RideDirection | null {
+  return value === "forward" || value === "reverse" ? value : null;
+}
+
+export function rideDirectionState(value: unknown): RideDirectionState {
+  return resolvedRideDirection(value) ?? "pending";
+}
+
+export function directionsMatch(left: unknown, right: unknown): boolean {
+  const leftDirection = resolvedRideDirection(left);
+  const rightDirection = resolvedRideDirection(right);
+  return Boolean(leftDirection && rightDirection && leftDirection === rightDirection);
+}
 
 export function normalizeRideDirection(value: unknown): RideDirection {
   return value === "reverse" ? "reverse" : "forward";
@@ -14,6 +29,13 @@ export function directionLabel(
   const origin = ordered[0]?.shortName || ordered[0]?.name || "Origin";
   const destination = ordered.at(-1)?.shortName || ordered.at(-1)?.name || "Destination";
   return `${origin} → ${destination}`;
+}
+
+export function directionStateLabel(
+  direction: RideDirectionState,
+  stops: RouteData["stops"],
+): string {
+  return direction === "pending" ? "Direction pending" : directionLabel(direction, stops);
 }
 
 /** Uses immutable session endpoints before falling back to the current route. */
