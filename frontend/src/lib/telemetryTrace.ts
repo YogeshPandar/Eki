@@ -39,7 +39,7 @@ declare global {
 }
 
 let state: TraceState | null = null;
-let enabledAtPageLoad: boolean | null = null;
+let traceEnabledForSession = false;
 
 function wallClockNow(): number {
   return Date.now();
@@ -73,9 +73,12 @@ function createState(): TraceState {
 
 export function telemetryTraceEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  enabledAtPageLoad ??=
+  // Auth and App Router transitions can load this module before the final URL
+  // contains the trace flag. Keep checking until tracing is enabled, then keep
+  // it active for the tab so a later navigation cannot truncate the capture.
+  traceEnabledForSession ||=
     new URLSearchParams(window.location.search).get(TRACE_QUERY_PARAMETER) === "1";
-  return enabledAtPageLoad;
+  return traceEnabledForSession;
 }
 
 function traceExport(current: TraceState): TelemetryTraceExport {
