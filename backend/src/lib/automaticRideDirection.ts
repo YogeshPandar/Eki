@@ -6,7 +6,8 @@ interface Coordinate {
   lng: number;
 }
 
-export const DIRECTION_INFERENCE_RADIUS_M = 75;
+export const ENDPOINT_DIRECTION_RADIUS_M = 20;
+export const TURNAROUND_ARRIVAL_RADIUS_M = 75;
 export const TURNAROUND_TELEMETRY_MAX_AGE_MS = 60_000;
 
 function validCoordinate(value: Coordinate | null | undefined): value is Coordinate {
@@ -25,7 +26,7 @@ function validCoordinate(value: Coordinate | null | undefined): value is Coordin
 export function inferRideDirectionAtEndpoint(
   stops: readonly Coordinate[],
   position: Coordinate,
-  radiusMeters = DIRECTION_INFERENCE_RADIUS_M,
+  radiusMeters = ENDPOINT_DIRECTION_RADIUS_M,
 ): RideDirection | null {
   if (
     stops.length < 2 ||
@@ -60,7 +61,7 @@ interface TurnaroundReadinessInput {
 /** Requires a fresh stopped fix at the completed destination after the dwell. */
 export function automaticTurnaroundIsReady(
   input: TurnaroundReadinessInput,
-  radiusMeters = DIRECTION_INFERENCE_RADIUS_M,
+  radiusMeters = TURNAROUND_ARRIVAL_RADIUS_M,
 ): boolean {
   return (
     Number.isFinite(input.now) &&
