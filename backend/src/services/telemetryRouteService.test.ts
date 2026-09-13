@@ -51,6 +51,12 @@ describe("reroute result guards", () => {
     expect(rerouteContextIsCurrent({ ...live, rerouteRequestId: "request-4" }, expected)).toBe(false);
     expect(rerouteContextIsCurrent({ ...live, direction: "reverse" }, expected)).toBe(false);
   });
+
+  it("rejects missing, null, and invalid directions instead of treating them as forward", () => {
+    expect(rerouteContextIsCurrent({ ...live, direction: undefined }, expected)).toBe(false);
+    expect(rerouteContextIsCurrent({ ...live, direction: null }, expected)).toBe(false);
+    expect(rerouteContextIsCurrent({ ...live, direction: "sideways" }, expected)).toBe(false);
+  });
 });
 
 describe("reliable moving sample HDOP gate", () => {
