@@ -3,6 +3,7 @@ import { db } from "../lib/firebaseAdmin";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { requireAuth } from "../middleware/requireAuth";
 import { decodePolyline } from "../lib/polylineUtils";
+import { reusableDirectionalGeometry } from "../lib/routeGeometryReuse";
 import { invalidatePlanRoute } from "./plan";
 
 const router = Router();
@@ -349,7 +350,17 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
       }
     }
     const waypoints = stops.map(({ lat, lng }) => ({ lat, lng }));
-    const geometry = await computeDirectionalPolylines(waypoints);
+    const existingRoute = existing.exists
+      ? existing.data() as Record<string, unknown>
+      : null;
+    const reusableGeometry = mode === "edit" && existingRoute
+      ? reusableDirectionalGeometry(
+          existingRoute,
+          routeWaypoints(existingRoute),
+          waypoints,
+        )
+      : null;
+    const geometry = reusableGeometry ?? await computeDirectionalPolylines(waypoints);
     const routeData = {
       id: routeId,
       name,
@@ -365,7 +376,12 @@ router.put("/:routeId", requireAdmin, async (req: Request, res: Response) => {
       await routeRef.set(routeData);
     }
     invalidatePlanRoute(routeId);
-    res.json({ saved: true, routeId, ...geometry });
+    res.json({
+      saved: true,
+      routeId,
+      geometryReused: reusableGeometry !== null,
+      ...geometry,
+    });
   } catch (error) {
     console.error("[Routes] Failed to save validated route:", error);
     geometryError(res);
