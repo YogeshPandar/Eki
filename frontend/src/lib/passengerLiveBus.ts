@@ -23,12 +23,7 @@ function busIdFromNodeKey(key: string, routeId: string): string | null {
   return busId.length > 0 ? busId : null;
 }
 
-/**
- * Convert one untrusted RTDB value into the single shape shared by the
- * passenger route list and map. Device presence remains an admin/chat signal;
- * passenger visibility requires an active session, explicit direction and a
- * non-terminal ride state.
- */
+/* passenger maps require an active session and explicit direction. */
 export function normalizePassengerLiveBus(
   key: string,
   value: unknown,
