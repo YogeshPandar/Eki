@@ -9,7 +9,7 @@ import { useRoutes, RouteData, RouteStop } from "@/hooks/useRoutes";
 import { auth } from "@/lib/firebaseAuth";
 import {
   Trash2, Plus, X, CheckCircle, MapPin, Loader2, Search,
-  Pencil, GripVertical, Save,
+  Pencil, Save, ArrowLeftRight,
   ChevronDown, ChevronUp, ArrowLeft, Crosshair,
 } from "lucide-react";
 import CustomSelect from "@/components/ui/CustomSelect";
@@ -18,7 +18,12 @@ import AlertModal from "@/components/ui/AlertModal";
 import { MAP_OPTIONS, MAPS_MAP_ID, DEFAULT_CENTER } from "@/config/maps";
 import { errorMessage } from "@/lib/errors";
 import { apiRequest } from "@/lib/apiClient";
-import { prepareRouteSavePayload, routeIdFromName, stopShortName } from "@/lib/routeStopPayload";
+import {
+  prepareRouteSavePayload,
+  reorderRouteStops,
+  routeIdFromName,
+  stopShortName,
+} from "@/lib/routeStopPayload";
 
 
 /* ────────────────────────────────────────────────────────────────────────────────────────────────── */
@@ -185,7 +190,7 @@ function RouteCard({ route, onEdit, onDelete }: { route: RouteData; onEdit: () =
       {stopsOpen && route.stops && route.stops.length > 0 && (
         <div className="border-t border-white/5 px-4 py-3 flex flex-col gap-0">
           {route.stops.map((stop, i) => (
-            <div key={i} className="flex items-stretch gap-3">
+            <div key={stop.id} className="flex items-stretch gap-3">
               <div className="flex flex-col items-center shrink-0">
                 <div className="w-6 h-6 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-[9px] shrink-0">
                   {stopLabel(i)}
@@ -203,7 +208,7 @@ function RouteCard({ route, onEdit, onDelete }: { route: RouteData; onEdit: () =
   );
 }
 
-/* â”€â”€ Stop list item (draggable in editor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* â”€â”€ Stop list item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 function StopItem({ stop, index, onRemove, onNameChange }: {
   stop: RouteStop; index: number;
   onRemove: (i: number) => void;
@@ -213,7 +218,6 @@ function StopItem({ stop, index, onRemove, onNameChange }: {
   const [val, setVal] = useState(stop.name);
   return (
     <div className="flex items-center gap-2 group">
-      <GripVertical className="w-4 h-4 text-white/15 shrink-0 cursor-grab" />
       <span className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 font-black text-[9px] flex items-center justify-center shrink-0">
         {stopLabel(index)}
       </span>
@@ -374,12 +378,22 @@ function RouteEditor({
 
   const moveStop = (from: number, to: number) => {
     if (to < 0 || to >= state.stops.length) return;
-    setState(s => {
-      const stops = [...s.stops];
-      const [item] = stops.splice(from, 1);
-      stops.splice(to, 0, item);
-      return { ...s, stops, polyline: undefined };
-    });
+    setState(s => ({
+      ...s,
+      stops: reorderRouteStops(s.stops, from, to),
+      polyline: undefined,
+    }));
+    setPositionMessage("Stop order changed. Save the route to publish the new geometry.");
+  };
+
+  const swapEndpoints = () => {
+    if (state.stops.length !== 2) return;
+    setState(s => ({
+      ...s,
+      stops: reorderRouteStops(s.stops, 0, 1),
+      polyline: undefined,
+    }));
+    setPositionMessage("Stops A and B swapped. Save the route to publish the new direction.");
   };
 
   const updateStopPosition = (i: number, lat: number, lng: number) => {
@@ -534,7 +548,7 @@ function RouteEditor({
             />
             {state.stops.map((stop, i) => (
               <AdvancedMarker
-                key={`s-${i}`}
+                key={stop.id}
                 position={{ lat: stop.lat, lng: stop.lng }}
                 draggable
                 onDragStart={() => setPositionMessage(`Moving stop ${stopLabel(i)}…`)}
@@ -582,12 +596,25 @@ function RouteEditor({
               className="w-full h-11 bg-[#0f0f12] border border-white/10 rounded-xl px-3 text-sm text-white focus:outline-none focus:border-white/30 placeholder:text-white/15 font-medium"
             />
           </div>
-          <div className="px-4 py-3 flex items-center justify-between bg-[#0f0f12]/80 backdrop-blur-xl border-b border-white/5">
+          <div className="px-4 py-3 flex items-center justify-between gap-2 bg-[#0f0f12]/80 backdrop-blur-xl border-b border-white/5">
             <div className="flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-emerald-400" />
               <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Stops</span>
             </div>
-            <span className="text-[9px] font-black text-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 rounded-full">{state.stops.length}</span>
+            <div className="flex items-center gap-2">
+              {state.stops.length === 2 && (
+                <button
+                  type="button"
+                  onClick={swapEndpoints}
+                  aria-label="Swap route endpoints A and B"
+                  className="min-h-9 rounded-lg border border-white/10 bg-white/5 px-2.5 text-[9px] font-black uppercase tracking-wider text-white/70 hover:bg-white/10 transition-colors flex items-center gap-1.5"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  Swap A &amp; B
+                </button>
+              )}
+              <span className="text-[9px] font-black text-emerald-400/50 bg-emerald-500/10 px-2 py-0.5 rounded-full">{state.stops.length}</span>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-1.5">
             {state.stops.length === 0 ? (
@@ -597,29 +624,35 @@ function RouteEditor({
               </div>
             ) : (
               state.stops.map((stop, i) => (
-                <div key={`${stop.id}-${i}`}>
+                <div key={stop.id}>
                   <StopItem stop={stop} index={i} onRemove={removeStop} onNameChange={renameStop} />
-                  <div className="flex items-center gap-1.5 pl-6 my-0.5">
-                    <div className="w-px h-4 bg-emerald-500/15 mx-2" />
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => moveStop(i, i - 1)}
-                        disabled={i === 0}
-                        className="w-5 h-5 rounded hover:bg-white/5 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Move up"
-                      >
-                        <ChevronUp className="w-3 h-3 text-white/20" />
-                      </button>
-                      <button
-                        onClick={() => moveStop(i, i + 1)}
-                        disabled={i === state.stops.length - 1}
-                        className="w-5 h-5 rounded hover:bg-white/5 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
-                        title="Move down"
-                      >
-                        <ChevronDown className="w-3 h-3 text-white/20" />
-                      </button>
+                  {state.stops.length > 2 && (
+                    <div className="flex items-center gap-1.5 pl-8 my-0.5">
+                      <div className="w-px h-4 bg-emerald-500/15 mx-2" />
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveStop(i, i - 1)}
+                          disabled={i === 0}
+                          className="w-9 h-9 rounded-lg border border-white/5 bg-white/[0.03] hover:bg-white/10 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={`Move stop ${stopLabel(i)} up`}
+                          aria-label={`Move stop ${stop.name} up`}
+                        >
+                          <ChevronUp className="w-4 h-4 text-white/40" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveStop(i, i + 1)}
+                          disabled={i === state.stops.length - 1}
+                          className="w-9 h-9 rounded-lg border border-white/5 bg-white/[0.03] hover:bg-white/10 flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={`Move stop ${stopLabel(i)} down`}
+                          aria-label={`Move stop ${stop.name} down`}
+                        >
+                          <ChevronDown className="w-4 h-4 text-white/40" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))
             )}
