@@ -2,14 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   countRidesByDirection,
   normalizeRideDirection,
+  resolvedRideDirection,
   stopsInRideDirection,
 } from "./rideDirection";
 import { reduceTripState } from "../services/tripStateReducer";
 
 describe("ride direction", () => {
-  it("defaults legacy rides to forward and reverses without mutating the route", () => {
-    const source = ["A", "M", "Z"];
+  it("keeps strict parsing separate from the legacy normalization helper", () => {
+    expect(resolvedRideDirection("forward")).toBe("forward");
+    expect(resolvedRideDirection("reverse")).toBe("reverse");
+    expect(resolvedRideDirection(undefined)).toBeNull();
+    expect(resolvedRideDirection(null)).toBeNull();
+    expect(resolvedRideDirection("sideways")).toBeNull();
     expect(normalizeRideDirection(undefined)).toBe("forward");
+  });
+
+  it("reverses travel order without mutating the route", () => {
+    const source = ["A", "M", "Z"];
     expect(stopsInRideDirection(source, "forward")).toEqual(["A", "M", "Z"]);
     expect(stopsInRideDirection(source, "reverse")).toEqual(["Z", "M", "A"]);
     expect(source).toEqual(["A", "M", "Z"]);

@@ -5,7 +5,7 @@ import {
   decodePolyline,
   type LatLng,
 } from "../lib/polylineUtils";
-import { normalizeRideDirection, stopsInRideDirection } from "../lib/rideDirection";
+import { resolvedRideDirection, stopsInRideDirection } from "../lib/rideDirection";
 import { recordBackgroundFailure } from "../lib/backgroundFailureTracker";
 import type { DeviceAssignment } from "./deviceTelemetryService";
 import type { TelemetryPayload } from "./telemetryPayload";
@@ -332,7 +332,7 @@ export function rerouteContextIsCurrent(
     live.rerouteRequestId === expected.requestId &&
     live.routeVersion === expected.routeVersion &&
     live.sessionId === expected.sessionId &&
-    normalizeRideDirection(live.direction) === expected.direction,
+    resolvedRideDirection(live.direction) === expected.direction,
   );
 }
 
@@ -493,7 +493,8 @@ async function processTelemetryRoute(
   const live = snapshot.val() as Record<string, unknown> | null;
   if (!telemetryIsCurrent(live, sample)) return;
 
-  const direction = normalizeRideDirection(live?.direction);
+  const direction = resolvedRideDirection(live?.direction);
+  if (!direction) return;
   const routeSessionId =
     typeof live?.sessionId === "string" ? live.sessionId : "device-only";
   const contextChanged =
