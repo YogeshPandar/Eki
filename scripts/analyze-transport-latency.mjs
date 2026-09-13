@@ -7,7 +7,7 @@ export const MAX_SAMPLES = 100_000;
 export const MAX_LINE_LENGTH = 4096;
 export const MAX_INPUT_BYTES = 64 * 1024 * 1024;
 const MARKER = "[Transport]";
-const RECORD = /^\[Transport\] seq=(\d{1,10}) status=(-?\d{1,5}) socket_open_before=([01]) headers_ms=(\d{1,10}) total_ms=(\d{1,10}) reusable=([01])$/;
+const RECORD = /^\[Transport\] seq=(\d{1,10}) status=(-?\d{1,5}) socket_open_before=([01]) headers_ms=(\d{1,10}) total_ms=(\d{1,10}) reusable=([01])(?: connect_attempts=(\d{1,10}) connect_ms=(\d{1,10}))?$/;
 
 /* parse only the bounded transport record; never retain the serial prefix. */
 export function parseRecord(line) {
@@ -17,9 +17,14 @@ export function parseRecord(line) {
   if (markerAt === -1) return null;
   const match = RECORD.exec(line.slice(markerAt).trimEnd());
   if (!match) throw new Error("malformed transport record");
+
   const [seq, status, socketOpenBefore, headersMs, totalMs, reusable] =
-    match.slice(1).map(Number);
+    match.slice(1, 7).map(Number);
+  const hasConnectionFields = match[7] !== undefined;
+  const connectAttempts = hasConnectionFields ? Number(match[7]) : null;
+  const connectMs = hasConnectionFields ? Number(match[8]) : null;
   const accepted = status === 200 || status === 202;
+
   if (
     seq > UINT32_MAX || headersMs > UINT32_MAX || totalMs > UINT32_MAX ||
     totalMs < headersMs ||
@@ -28,7 +33,26 @@ export function parseRecord(line) {
   ) {
     throw new Error("invalid transport record values");
   }
-  return { seq, status, socketOpenBefore, headersMs, totalMs, reusable, accepted };
+  if (
+    hasConnectionFields && (
+      connectAttempts > UINT32_MAX || connectMs > UINT32_MAX ||
+      (connectAttempts === 0 && connectMs !== 0) || connectMs > headersMs
+    )
+  ) {
+    throw new Error("invalid connection timing values");
+  }
+
+  return {
+    seq,
+    status,
+    socketOpenBefore,
+    headersMs,
+    totalMs,
+    reusable,
+    connectAttempts,
+    connectMs,
+    accepted,
+  };
 }
 
 /* keep a bounded partial line even when a capture omits newlines. */
@@ -77,6 +101,22 @@ function summarizeGroup(records) {
   };
 }
 
+function summarizeConnectionGroup(records) {
+  return {
+    ...summarizeGroup(records),
+    socketOpenBefore: records.filter((record) => record.socketOpenBefore === 1).length,
+    totalConnectAttempts: records.reduce(
+      (total, record) => total + record.connectAttempts,
+      0,
+    ),
+    connectMs: distribution(
+      records
+        .filter((record) => record.connectAttempts > 0)
+        .map((record) => record.connectMs),
+    ),
+  };
+}
+
 export async function analyzeLines(lines, maxSamples = MAX_SAMPLES) {
   if (!Number.isInteger(maxSamples) || maxSamples < 1 || maxSamples > MAX_SAMPLES) {
     throw new RangeError("invalid sample limit");
@@ -87,10 +127,22 @@ export async function analyzeLines(lines, maxSamples = MAX_SAMPLES) {
     nonaccepted_socket_closed: [],
     nonaccepted_socket_open_candidate: [],
   };
+  const connectionGroups = {
+    accepted_no_connect_attempt: [],
+    accepted_connect_attempted: [],
+    nonaccepted_no_connect_attempt: [],
+    nonaccepted_connect_attempted: [],
+  };
   const statusCounts = new Map();
+  const connectDurations = [];
   let samples = 0;
   let ignoredLines = 0;
   let lineNumber = 0;
+  let observedConnectionRecords = 0;
+  let unknownConnectionRecords = 0;
+  let requestsWithConnectAttempt = 0;
+  let totalConnectAttempts = 0;
+
   for await (const line of lines) {
     ++lineNumber;
     let record;
@@ -104,18 +156,47 @@ export async function analyzeLines(lines, maxSamples = MAX_SAMPLES) {
       continue;
     }
     if (++samples > maxSamples) throw new Error("sample limit exceeded");
+
     const outcome = record.accepted ? "accepted" : "nonaccepted";
     const socket = record.socketOpenBefore ? "socket_open_candidate" : "socket_closed";
     groups[`${outcome}_${socket}`].push(record);
     statusCounts.set(record.status, (statusCounts.get(record.status) ?? 0) + 1);
+
+    if (record.connectAttempts === null) {
+      ++unknownConnectionRecords;
+      continue;
+    }
+    ++observedConnectionRecords;
+    totalConnectAttempts += record.connectAttempts;
+    const connection = record.connectAttempts > 0
+      ? "connect_attempted"
+      : "no_connect_attempt";
+    connectionGroups[`${outcome}_${connection}`].push(record);
+    if (record.connectAttempts > 0) {
+      ++requestsWithConnectAttempt;
+      connectDurations.push(record.connectMs);
+    }
   }
+
   if (samples === 0) throw new Error("no transport records found");
   return {
     samples,
     ignoredLines,
     statusCounts: Object.fromEntries([...statusCounts].sort(([a], [b]) => a - b)),
+    connectionObservations: {
+      observedRecords: observedConnectionRecords,
+      unknownRecords: unknownConnectionRecords,
+      requestsWithAttempt: requestsWithConnectAttempt,
+      totalAttempts: totalConnectAttempts,
+      connectMs: distribution(connectDurations),
+    },
     groups: Object.fromEntries(
       Object.entries(groups).map(([name, records]) => [name, summarizeGroup(records)]),
+    ),
+    connectionGroups: Object.fromEntries(
+      Object.entries(connectionGroups).map(
+        ([name, records]) => [name, summarizeConnectionGroup(records)],
+      ),
     ),
   };
 }
@@ -155,9 +236,9 @@ async function main(args) {
   }
   /* publish no partial report when a later input is invalid. */
   console.log(JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     percentileMethod: "nearest_rank",
-    note: "socket state is a reuse candidate; durations are not TLS-only measurements",
+    note: "missing connection fields remain unknown; durations are not TLS-only measurements",
     captures,
   }, null, 2));
 }
