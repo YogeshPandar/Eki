@@ -147,13 +147,15 @@ describe("live bus marker position", () => {
     "uses raw telemetry while route state is %s",
     (routeState) => {
       const input = currentMatchedInput();
-      input.routeState = routeState;
-      input.matchedLocation = {
-        ...input.matchedLocation,
-        seq: 10,
-        sampledAt: 1_000,
-      };
-      expect(liveBusMarkerDecision(input)).toEqual({
+      expect(liveBusMarkerDecision({
+        ...input,
+        routeState,
+        matchedLocation: {
+          ...input.matchedLocation,
+          seq: 10,
+          sampledAt: 1_000,
+        },
+      })).toEqual({
         kind: "raw",
         position: { lat: input.lat, lng: input.lng },
       });
