@@ -87,7 +87,9 @@ The 100-sample queue occupies 5,648 bytes of RTC no-init memory. At the maximum 
 | Heading change | 15° | Direction materiality |
 | Speed change | 5 km/h | Velocity materiality |
 | Moving/stopped heartbeat | 1 / 5 s | Live movement plus fresh stopped endpoint state |
-| HTTP connect/request timeout | 7 s | Bound blocked network work |
+| HTTP connect/header read timeout | 7 s each | Separate phases, not an overall deadline |
+| TLS handshake timeout | 7 s | Bound the handshake phase on both secure clients |
+| Reusable response drain | 1 s total, up to 4 KiB | Bound cleanup with a 128-byte stack buffer |
 | GNSS UTC maximum age | 2 s | Reject stale date/time sentences |
 | GNSS correction | >=1.5 s, at most once/minute | Primary clock discipline without rapid jumps |
 | NTP cross-check | startup after Wi-Fi, then six-hour schedule | Independent fallback/check; not a publish dependency |
@@ -102,6 +104,24 @@ The 100-sample queue occupies 5,648 bytes of RTC no-init memory. At the maximum 
 Wi-Fi persistence is disabled before the driver starts, auto-reconnect is enabled, the strongest known AP is selected with fast scan, and modem sleep is disabled because the tracker is vehicle-powered and latency is preferred over battery life. Outages retry indefinitely with bounded exponential delay; the firmware never starts a soft AP or HTTP server. A credential fault disables the station radio and GPIO2 emits three short pulses every two seconds until corrected firmware is flashed. Fleet builds require release-mode flash encryption and Secure Boot, and explicitly disable ESP32 Wi-Fi key-value persistence.
 
 Deterministic UTC conversion/discipline lives in `hardware/include/clock_policy.h`; Wi-Fi retry and LED behavior in `hardware/include/connectivity_policy.h`; compile-time secret validation in `hardware/include/firmware_config.h`; distance, heading, motion hysteresis, HTTP outcomes and capture decisions in `hardware/include/telemetry_policy.h`; and queue ordering/recovery in `hardware/include/telemetry_queue.h`. Pure policies are executed on the host by `platformio test -d hardware -e native`. Radio, UART, antenna, TLS, watchdog and power behavior remain physical acceptance concerns.
+
+## HTTPS session ownership
+
+Telemetry and diagnostic POSTs plus fleet manifest GETs share one publisher-owned
+`BackendSession` and `HTTPClient`, retaining the verified connection after a
+complete bounded response. Request-local HTTP clients would close that socket
+in their destructor despite `setReuse(true)`. Errors, unsupported framing,
+unexpected bytes, server close, Wi-Fi loss and credential lockout discard the
+connection. An accepted telemetry status remains accepted even if cleanup fails.
+Actual signed-artifact downloads release the backend session and use a separate
+client without device authorization. CA and hostname verification remain enabled.
+
+See [HTTPS connection reuse](TLS_CONNECTION_REUSE.md) for version-matched library
+references, response-boundary tests and physical acceptance. Bench builds may
+append `-D EKI_TRANSPORT_METRICS=1` to existing build flags for monotonic per-POST
+measurements, actual connection-attempt counts and DNS/TCP/TLS connect duration.
+Socket-state flags remain reuse candidates; these measurements do not isolate
+certificate verification or prove TLS session-ticket resumption.
 
 ## Payload and HTTP outcomes
 
