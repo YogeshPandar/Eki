@@ -62,15 +62,6 @@ function normalizePlaces(value: unknown): PlaceResult[] {
   });
 }
 
-function isAbortError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    (error as { name?: unknown }).name === "AbortError"
-  );
-}
-
 export async function searchGooglePlaces(
   query: string,
   apiKey: string,
@@ -113,11 +104,10 @@ export async function searchGooglePlaces(
       return { ok: false, reason: "invalid_response" };
     }
     return { ok: true, results: normalizePlaces(payload) };
-  } catch (error) {
-    if (controller.signal.aborted || isAbortError(error)) {
-      return { ok: false, reason: "timeout" };
-    }
-    return { ok: false, reason: "network" };
+  } catch {
+    return controller.signal.aborted
+      ? { ok: false, reason: "timeout" }
+      : { ok: false, reason: "network" };
   } finally {
     clearTimeout(timeoutId);
   }
