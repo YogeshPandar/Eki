@@ -4,6 +4,18 @@ type ApiRequestOptions = RequestInit & {
   fallbackError?: string;
 };
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 function configuredBackendUrl(): string {
   const configured = process.env.NEXT_PUBLIC_BACKEND_URL;
   if (!configured) throw new Error("Backend URL is invalid or not configured.");
@@ -51,24 +63,29 @@ export async function apiRequest<T>(
       signal: requestController.signal,
     });
     if (response.status === 204) return undefined as T;
-    let result: T & { error?: unknown };
+    let result: T & { error?: unknown; code?: unknown };
     try {
-      result = await response.json() as T & { error?: unknown };
+      result = await response.json() as T & { error?: unknown; code?: unknown };
     } catch (error) {
       if (response.ok) throw error;
-      result = {} as T & { error?: string };
+      result = {} as T & { error?: unknown; code?: unknown };
     }
     if (!response.ok) {
       const message = typeof result.error === "string" && result.error.trim()
         ? result.error
         : `${fallbackError} (HTTP ${response.status})`;
-      throw new Error(message);
+      const code = typeof result.code === "string" && result.code.trim()
+        ? result.code
+        : undefined;
+      throw new ApiError(message, response.status, code);
     }
     return result;
   } catch (error) {
     if (abortSource === "timeout") {
       throw new Error("The request timed out. Please try again.");
     }
+    if (abortSource === "caller" || error instanceof ApiError) throw error;
+    if (error instanceof TypeError) throw new Error(fallbackError);
     throw error;
   } finally {
     clearTimeout(timeout);
