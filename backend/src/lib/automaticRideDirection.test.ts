@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ENDPOINT_DIRECTION_RADIUS_M,
+  TURNAROUND_ARRIVAL_RADIUS_M,
   automaticTurnaroundIsReady,
   inferRideDirectionAtEndpoint,
   oppositeRideDirection,
@@ -23,6 +25,21 @@ describe("automatic ride direction", () => {
       [{ lat: 23, lng: 72 }, { lat: 23, lng: 72 }],
       { lat: 23, lng: 72 },
     )).toBeNull();
+  });
+
+  it("keeps the default direction geofence narrower than turnaround arrival", () => {
+    expect(ENDPOINT_DIRECTION_RADIUS_M).toBe(20);
+    expect(TURNAROUND_ARRIVAL_RADIUS_M).toBe(75);
+
+    const outsideDirectionGate = { lat: 23.0003, lng: 72 };
+    expect(inferRideDirectionAtEndpoint(stops, outsideDirectionGate)).toBeNull();
+    expect(
+      inferRideDirectionAtEndpoint(
+        stops,
+        outsideDirectionGate,
+        TURNAROUND_ARRIVAL_RADIUS_M,
+      ),
+    ).toBe("forward");
   });
 
   it("always selects the opposite return direction", () => {
