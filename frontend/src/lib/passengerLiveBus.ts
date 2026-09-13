@@ -1,6 +1,6 @@
 import { isActiveBusEntry, type ActiveBusEntry } from "./activeBusEntries";
 import { hasValidBusCoordinates } from "./liveBusFreshness";
-import { isPassengerServiceEligible } from "./rideServiceEligibility";
+import { isPassengerRideVisible } from "./rideServiceEligibility";
 
 export interface PassengerLiveBus extends ActiveBusEntry {
   busId: string;
@@ -23,7 +23,7 @@ function busIdFromNodeKey(key: string, routeId: string): string | null {
   return busId.length > 0 ? busId : null;
 }
 
-/* passenger maps require an active session and explicit direction. */
+/* passenger views keep an armed pending ride observable without inventing service. */
 export function normalizePassengerLiveBus(
   key: string,
   value: unknown,
@@ -41,7 +41,7 @@ export function normalizePassengerLiveBus(
   const candidate: Record<string, unknown> = { ...raw, busId, routeId };
   if (
     !isActiveBusEntry(candidate, now) ||
-    !isPassengerServiceEligible(candidate) ||
+    !isPassengerRideVisible(candidate) ||
     !hasValidBusCoordinates(candidate.lat, candidate.lng)
   ) {
     return null;
