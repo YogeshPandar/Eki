@@ -92,6 +92,7 @@ constexpr uint32_t GNSS_UTC_MAX_AGE_MS = 2000;
 constexpr uint32_t GNSS_EPOCH_REFERENCE_MAX_AGE_MS = 24UL * 60 * 60 * 1000;
 constexpr uint32_t NTP_CROSS_CHECK_INTERVAL_MS = 6UL * 60 * 60 * 1000;
 constexpr uint32_t HTTP_TIMEOUT_MS = 7000;
+/* the secure client handshake setter takes seconds, not milliseconds. */
 constexpr uint32_t TLS_HANDSHAKE_TIMEOUT_SECONDS = (HTTP_TIMEOUT_MS + 999) / 1000;
 constexpr uint32_t WATCHDOG_TIMEOUT_MS = 25000;
 // TelemetryFix grew when receiver HDOP and monotonic sequencing were added.
@@ -99,6 +100,7 @@ constexpr uint32_t WATCHDOG_TIMEOUT_MS = 25000;
 constexpr size_t TELEMETRY_QUEUE_CAPACITY = 100;
 constexpr uint32_t FIRST_REMOTE_DIAGNOSTIC_DELAY_MS = 30000;
 constexpr uint32_t REMOTE_DIAGNOSTIC_INTERVAL_MS = 5UL * 60 * 1000;
+constexpr size_t FIRMWARE_MANIFEST_MAX_BYTES = 1024;
 
 const char *httpTransportFailureName(int code) {
   switch (code) {
@@ -124,12 +126,15 @@ constexpr UBaseType_t PUBLISHER_TASK_PRIORITY = 1;
 constexpr size_t GPS_RX_BUFFER_BYTES = 8192;
 constexpr uint8_t STATUS_LED_PIN = 2;
 
+struct HttpClock {
+  static uint32_t now() { return millis(); }
+  static void idle() { delay(1); }
+};
+
 TinyGPSPlus gps;
 HardwareSerial &gpsSerial = Serial2;
-WiFiClientSecure tlsClient;
-WiFiClient plainClient;
-/* only the publisher task uses this session after setup. */
-HTTPClient backendHttp;
+eki::http::TimedClient<WiFiClientSecure, HttpClock> tlsClient;
+eki::http::TimedClient<WiFiClient, HttpClock> plainClient;
 #if EKI_FLEET_BUILD
 WiFiClientSecure firmwareTlsClient;
 #endif
@@ -265,6 +270,19 @@ WiFiClient &getNetworkClient() {
   }
   return tlsClient;
 }
+/* one parser owns the backend connection across all publisher requests. */
+eki::http::BackendSession<HTTPClient, WiFiClient, HttpClock> backendSession(
+  getNetworkClient(), BACKEND_URL, HTTP_TIMEOUT_MS
+);
+
+#if EKI_TRANSPORT_METRICS
+eki::http::ConnectTiming networkConnectTiming() {
+  return eki::config::backendUrlUsesHttps(BACKEND_URL)
+    ? tlsClient.timing()
+    : plainClient.timing();
+}
+#endif
+
 eki::connectivity::WifiRetrySupervisor wifiRetrySupervisor;
 portMUX_TYPE deviceFaultMux = portMUX_INITIALIZER_UNLOCKED;
 eki::connectivity::FaultCode deviceFault = eki::connectivity::FaultCode::None;
@@ -655,7 +673,7 @@ void configureStationRadio() {
 
 void attemptWifiConnection() {
   if (credentialFaultActive) return;
-  getNetworkClient().stop();
+  backendSession.reset();
   if (!wifiConfigured) {
     configureStationRadio();
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -687,6 +705,7 @@ void updateConnectivityFault() {
 void latchCredentialFault() {
   if (credentialFaultActive) return;
   credentialFaultActive = true;
+  backendSession.reset();
   resetHttpsRetry();
   // Compile-time credentials can only be replaced by reflashing. Stop the
   // radio after a definitive rejection so the device cannot retry stale
@@ -706,6 +725,7 @@ void serviceConnectivity() {
   if (!wifiStatusKnown || connected != lastWifiConnected) {
     wifiStatusKnown = true;
     lastWifiConnected = connected;
+    if (!connected) backendSession.reset();
     Serial.printf(
       "[WiFi] %s.\n",
       connected ? "Connected" : "Not connected; waiting"
@@ -859,11 +879,14 @@ void enforceOtaValidationDeadline() {
   ESP.restart();
 }
 
-bool parseFirmwareManifest(HTTPClient &http, FirmwareManifest &manifest) {
-  const int contentLength = http.getSize();
-  if (contentLength <= 0 || contentLength > 1024) return false;
+bool parseFirmwareManifest(
+  const char *body,
+  size_t bodyLength,
+  FirmwareManifest &manifest
+) {
+  if (bodyLength == 0 || bodyLength > FIRMWARE_MANIFEST_MAX_BYTES) return false;
   JsonDocument document;
-  const DeserializationError error = deserializeJson(document, http.getStream());
+  const DeserializationError error = deserializeJson(document, body, bodyLength);
   if (error) return false;
 
   const char *version = document["version"] | "";
@@ -1053,10 +1076,8 @@ void checkForSignedFirmware() {
   lastFirmwareCheckAt = millis();
   previousFirmwareCheckFailed = true;
 
-  HTTPClient http;
-  http.setConnectTimeout(HTTP_TIMEOUT_MS);
-  http.setTimeout(HTTP_TIMEOUT_MS);
-  if (!http.begin(tlsClient, firmwareEndpoint)) {
+  HTTPClient &http = backendSession.request();
+  if (!backendSession.begin(firmwareEndpoint)) {
     Serial.println("[OTA] Unable to initialize authenticated release check.");
     return;
   }
@@ -1064,25 +1085,28 @@ void checkForSignedFirmware() {
   http.addHeader("Cache-Control", "no-store");
   const int responseCode = http.GET();
   if (responseCode == 401 || responseCode == 403) {
-    http.end();
+    backendSession.finish(responseCode);
     latchCredentialFault();
     Serial.println("[OTA] Credential fault latched during release check.");
     return;
   }
   if (responseCode == 204) {
     previousFirmwareCheckFailed = false;
-    http.end();
+    backendSession.finish(responseCode);
     return;
   }
+  /* consume the complete response before parsing or reusing the connection. */
+  char body[FIRMWARE_MANIFEST_MAX_BYTES + 1]{};
+  const bool bodyComplete = backendSession.finish(responseCode, body, sizeof(body));
   FirmwareManifest manifest{};
-  if (responseCode != 200 || !parseFirmwareManifest(http, manifest)) {
+  if (responseCode != 200 || !bodyComplete ||
+      !parseFirmwareManifest(body, backendSession.responseBytes(), manifest)) {
     Serial.printf("[OTA] Release manifest rejected (HTTP %d).\n", responseCode);
-    http.end();
-    tlsClient.stop();
+    backendSession.reset();
     return;
   }
-  http.end();
-  tlsClient.stop();
+  /* release backend tls memory while the separate artifact client downloads. */
+  backendSession.reset();
   previousFirmwareCheckFailed = !installSignedFirmware(manifest);
 }
 #endif
@@ -1116,12 +1140,8 @@ PublishResult publishFix(const TelemetryFix &fix) {
     return PublishResult::Dropped;
   }
 
-  /* a request-local client would close the reusable socket on destruction. */
-  HTTPClient &http = backendHttp;
-  http.setReuse(true);
-  if (!http.begin(getNetworkClient(), telemetryEndpoint)) {
-    getNetworkClient().stop();
-    http.end();
+  HTTPClient &http = backendSession.request();
+  if (!backendSession.begin(telemetryEndpoint)) {
     Serial.println("[HTTPS] Unable to initialize telemetry request.");
     scheduleHttpsRetry();
     return eki::telemetry::retryKeepsSampleFresh(
@@ -1137,6 +1157,7 @@ PublishResult publishFix(const TelemetryFix &fix) {
 
 #if EKI_TRANSPORT_METRICS
   const bool socketOpenBefore = getNetworkClient().connected();
+  const uint32_t connectAttemptsBefore = networkConnectTiming().attempts;
 #endif
   const uint32_t startedAt = millis();
   const int responseCode = http.POST(
@@ -1151,28 +1172,27 @@ PublishResult publishFix(const TelemetryFix &fix) {
   const uint32_t retryAfterMs = responseCode == 429
     ? eki::telemetry::retryAfterDelayMs(http.header("Retry-After").c_str())
     : 0;
-  /* end() alone does not consume a fragmented response on the secure client. */
-  const bool reusable = eki::http::finishResponse(
-    http,
-    getNetworkClient(),
-    action == eki::telemetry::HttpResponseAction::Accept,
-    []() -> uint32_t { return millis(); },
-    []() { delay(1); }
+  const bool bodyComplete = backendSession.finish(
+    action == eki::telemetry::HttpResponseAction::Accept ? responseCode : 0
   );
   const uint32_t requestMs = elapsed(startedAt);
 #if EKI_TRANSPORT_METRICS
-  /* socket state is a reuse candidate, not proof of tls session resumption. */
+  const eki::http::ConnectTiming timing = networkConnectTiming();
+  const uint32_t connectAttempts = timing.attempts - connectAttemptsBefore;
+  const bool reusable = bodyComplete && getNetworkClient().connected();
+  /* connect_ms includes dns, tcp and tls; it is not certificate-only timing. */
   Serial.printf(
-    "[Transport] seq=%lu status=%d socket_open_before=%u headers_ms=%lu total_ms=%lu reusable=%u\n",
-    static_cast<unsigned long>(fix.sequence),
-    responseCode,
+    "[Transport] seq=%lu status=%d socket_open_before=%u headers_ms=%lu total_ms=%lu reusable=%u connect_attempts=%lu connect_ms=%lu\n",
+    static_cast<unsigned long>(fix.sequence), responseCode,
     static_cast<unsigned>(socketOpenBefore),
     static_cast<unsigned long>(headersMs),
     static_cast<unsigned long>(requestMs),
-    static_cast<unsigned>(reusable)
+    static_cast<unsigned>(reusable),
+    static_cast<unsigned long>(connectAttempts),
+    static_cast<unsigned long>(connectAttempts == 0 ? 0 : timing.durationMs)
   );
 #else
-  (void)reusable;
+  (void)bodyComplete;
 #endif
   if (responseCode < 0) {
     Serial.printf(
@@ -1305,12 +1325,8 @@ void publishRemoteDiagnostic() {
     return;
   }
 
-  /* diagnostics must not destroy the warm telemetry connection. */
-  HTTPClient &http = backendHttp;
-  http.setReuse(true);
-  if (!http.begin(getNetworkClient(), diagnosticsEndpoint)) {
-    getNetworkClient().stop();
-    http.end();
+  HTTPClient &http = backendSession.request();
+  if (!backendSession.begin(diagnosticsEndpoint)) {
     Serial.println("[Diagnostics] Unable to initialize remote health request.");
     scheduleRemoteDiagnosticRetry();
     return;
@@ -1323,13 +1339,7 @@ void publishRemoteDiagnostic() {
     reinterpret_cast<uint8_t *>(payload),
     payloadLength
   );
-  eki::http::finishResponse(
-    http,
-    getNetworkClient(),
-    responseCode >= 200 && responseCode < 300,
-    []() -> uint32_t { return millis(); },
-    []() { delay(1); }
-  );
+  backendSession.finish(responseCode);
   if (responseCode == 401 || responseCode == 403) {
     latchCredentialFault();
     Serial.println("[Diagnostics] Credential fault latched; firmware reflash required.");
@@ -1635,7 +1645,6 @@ void setup() {
 
   if (eki::config::backendUrlUsesHttps(BACKEND_URL)) {
     tlsClient.setCACert(BACKEND_ROOT_CA);
-    /* this api takes seconds; the http timeouts use milliseconds. */
     tlsClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_SECONDS);
 #if EKI_FLEET_BUILD
     firmwareTlsClient.setCACert(BACKEND_ROOT_CA);
@@ -1646,12 +1655,8 @@ void setup() {
     Serial.println("[Boot] Compile-time request configuration is too long; halted.");
     haltWithStatusLed(2);
   }
-  backendHttp.setConnectTimeout(HTTP_TIMEOUT_MS);
-  backendHttp.setTimeout(HTTP_TIMEOUT_MS);
-  backendHttp.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
-  /* allocate the response header table once, not for each telemetry sample. */
-  const char *responseHeaders[] = {"Retry-After", "Transfer-Encoding"};
-  backendHttp.collectHeaders(responseHeaders, 2);
+  /* never forward device authorization to a redirected origin. */
+  backendSession.request().setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
   sntp_set_time_sync_notification_cb(onNtpTimeSynchronized);
   configureWatchdog();
   const BaseType_t taskResult = xTaskCreatePinnedToCore(

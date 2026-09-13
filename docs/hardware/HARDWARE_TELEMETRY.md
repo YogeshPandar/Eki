@@ -107,19 +107,21 @@ Deterministic UTC conversion/discipline lives in `hardware/include/clock_policy.
 
 ## HTTPS session ownership
 
-Telemetry and diagnostic POSTs share one publisher-owned `HTTPClient`, retaining
-an authenticated connection after fully consuming a bounded success body.
-Request-local HTTP clients would close that socket in their destructor despite
-`setReuse(true)`. Errors, incomplete or unsupported response bodies, server close,
-and Wi-Fi recovery discard the connection; an accepted status remains accepted
-even if body cleanup requires reconnecting. OTA retains its existing separate
-request lifetimes. CA and hostname verification remain enabled.
+Telemetry and diagnostic POSTs plus fleet manifest GETs share one publisher-owned
+`BackendSession` and `HTTPClient`, retaining the verified connection after a
+complete bounded response. Request-local HTTP clients would close that socket
+in their destructor despite `setReuse(true)`. Errors, unsupported framing,
+unexpected bytes, server close, Wi-Fi loss and credential lockout discard the
+connection. An accepted telemetry status remains accepted even if cleanup fails.
+Actual signed-artifact downloads release the backend session and use a separate
+client without device authorization. CA and hostname verification remain enabled.
 
 See [HTTPS connection reuse](TLS_CONNECTION_REUSE.md) for version-matched library
 references, response-boundary tests and physical acceptance. Bench builds may
 append `-D EKI_TRANSPORT_METRICS=1` to existing build flags for monotonic per-POST
-measurements. The logs distinguish a reuse candidate from request duration;
-they do not measure TLS-only latency or prove session resumption.
+measurements, actual connection-attempt counts and DNS/TCP/TLS connect duration.
+Socket-state flags remain reuse candidates; these measurements do not isolate
+certificate verification or prove TLS session-ticket resumption.
 
 ## Payload and HTTP outcomes
 
