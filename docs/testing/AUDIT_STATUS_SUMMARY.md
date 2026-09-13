@@ -1,6 +1,6 @@
 # Eki audit fixes and physical-test readiness
 
-Updated: 2026-09-13. Implementation is on `testing` above baseline `30a606a`; no merge to `main`.
+Updated: 2026-09-13. Implementation commit `c9e5940` is pushed to `testing`; no merge to `main`.
 
 ## Corrected
 
@@ -23,6 +23,7 @@ Updated: 2026-09-13. Implementation is on `testing` above baseline `30a606a`; no
 - **BROWSER E2E VERIFIED:** authenticated Admin route editor at 360×800 rendered Move/Remove at 44×44 px with opacity 1 and no Route Type. Live Ops, Routes, Feedback, and Settings had no horizontal overflow across 320×700 through 1440×900. Settings exposed one Save action.
 - **BROWSER E2E VERIFIED:** Passenger at 360×800 showed the connected stopped bus as **Vehicle available — service not started**, with no horizontal overflow and no false direction/ETA/session.
 - **STATICALLY VERIFIED:** production frontend/backend builds, TypeScript, ESLint, CSP/backend contract, and UI contract pass locally.
+- **GITHUB VERIFIED:** Production verification passed on exact implementation commit `c9e5940`, including the backend container smoke test, web tests, Firebase rules, strict production build, dependency audit, native/ESP32 firmware builds, and signed fleet build ([run 34772776154](https://github.com/notnamansinha/Eki/actions/runs/34772776154)).
 
 ## Pending physical/deployment proof
 
@@ -31,6 +32,5 @@ Updated: 2026-09-13. Implementation is on `testing` above baseline `30a606a`; no
 - [ ] Exercise End ride early against a disposable real ride, then reload History and confirm the row and details persist.
 - [ ] Run a long stationary soak plus deliberate Wi-Fi loss, packet loss/slow radio, TLS idle expiry, backend restart, and ngrok restart on this exact build.
 - [ ] Validate the signed secure fleet image and OTA path on production-class hardware before deployment.
-- [ ] Re-run GitHub CI for the pushed implementation SHA before merge.
 
 The three-minute trace establishes that the earlier 4.821 s stationary listener gap did not recur in this window. It does not prove zero latency under every network or tunnel failure: cold TLS retains a separate 10 s safety budget, and the internet, DNS, ngrok, Firebase, and radio can still delay delivery.
