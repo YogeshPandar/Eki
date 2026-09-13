@@ -1,11 +1,15 @@
 export type RideDirection = "forward" | "reverse";
 
-export function normalizeRideDirection(value: unknown): RideDirection {
-  return value === "reverse" ? "reverse" : "forward";
-}
-
 export function isRideDirection(value: unknown): value is RideDirection {
   return value === "forward" || value === "reverse";
+}
+
+export function resolvedRideDirection(value: unknown): RideDirection | null {
+  return isRideDirection(value) ? value : null;
+}
+
+export function normalizeRideDirection(value: unknown): RideDirection {
+  return resolvedRideDirection(value) ?? "forward";
 }
 
 /** Returns a new array in immutable travel order for this ride. */
