@@ -37,6 +37,15 @@ export function rideServiceState(
   return entry.tripState;
 }
 
+export function isPassengerRideVisible(
+  entry: ServiceEntry | null | undefined,
+): boolean {
+  const state = rideServiceState(entry);
+  return state === "direction_pending" ||
+    state === "pre_departure" ||
+    state === "in_service";
+}
+
 export function isPassengerServiceEligible(
   entry: ServiceEntry | null | undefined,
 ): boolean {
