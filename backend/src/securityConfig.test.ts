@@ -550,10 +550,22 @@ describe("production security configuration", () => {
       'http.addHeader("Authorization", authorizationHeader)',
     );
     expect(firmware).not.toContain("HTTPClient::errorToString(responseCode)");
-    expect(firmware).toContain('http.collectHeaders(responseHeaders, 4)');
+    expect(firmware).toContain('#include "http_response.h"');
+    expect(firmware).not.toContain("http.getString()");
+    expect(firmware).toContain("HTTPC_DISABLE_FOLLOW_REDIRECTS");
+    expect(firmware).toContain("consumeAcceptedResponse<HttpClock>");
+    expect(firmware).toContain("ReuseGuardedClient<WiFiClient>");
+    expect(firmware).toContain("ReuseGuardedClient<WiFiClientSecure>");
+    expect(firmware).toContain("guardNetworkClientReuse()");
+    expect(firmware).not.toContain(
+      "if (networkClient.available() != 0) networkClient.stop();",
+    );
+    expect(firmware).toContain('http.collectHeaders(responseHeaders, 6)');
     expect(firmware).toContain('"Ngrok-Error-Code"');
     expect(firmware).toContain('"X-Eki-Server-Received-At"');
     expect(firmware).toContain('"X-Eki-Server-Responded-At"');
+    expect(firmware).toContain('"Content-Length"');
+    expect(firmware).toContain('"Transfer-Encoding"');
     expect(firmware).toContain('#include "secrets.h"');
     expect(firmware).toContain("eki::config::validate(");
     expect(firmwareConfig).toContain("backendUrlUsesHttps");

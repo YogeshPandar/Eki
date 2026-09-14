@@ -2,6 +2,7 @@
 #include "connectivity_policy.h"
 #include "firmware_config.h"
 #include "firmware_update_policy.h"
+#include "http_response.h"
 #include "secrets.h"
 #include "telemetry_policy.h"
 #include "telemetry_queue.h"
@@ -126,13 +127,20 @@ constexpr UBaseType_t PUBLISHER_TASK_PRIORITY = 1;
 constexpr size_t GPS_RX_BUFFER_BYTES = 8192;
 constexpr uint8_t STATUS_LED_PIN = 2;
 
+struct HttpClock {
+  static uint32_t now() { return millis(); }
+  static void idle() { delay(1); }
+};
+
 TinyGPSPlus gps;
 HardwareSerial &gpsSerial = Serial2;
-class TimedSecureClient : public WiFiClientSecure {
+using ReuseSafePlainClient = eki::http::ReuseGuardedClient<WiFiClient>;
+using ReuseSafeSecureClient = eki::http::ReuseGuardedClient<WiFiClientSecure>;
+class TimedSecureClient : public ReuseSafeSecureClient {
   const char *channel;
 public:
   explicit TimedSecureClient(const char *name = "telemetry") : channel(name) {}
-  using WiFiClientSecure::connect;
+  using ReuseSafeSecureClient::connect;
   int connect(const char *host, uint16_t port, int32_t timeout) override {
     const uint32_t preparingAt = millis();
     prepareTelemetryTlsKey();
@@ -153,7 +161,7 @@ public:
   }
 };
 TimedSecureClient tlsClient;
-WiFiClient plainClient;
+ReuseSafePlainClient plainClient;
 WiFiClientSecure maintenanceTlsClient;
 // Diagnostic transport belongs exclusively to its worker. Manifest checks
 // retain maintenanceTlsClient on the publisher; no TLS object crosses tasks.
@@ -297,6 +305,15 @@ WiFiClient &getNetworkClient() {
     return plainClient;
   }
   return tlsClient;
+}
+
+void guardNetworkClientReuse() {
+  WiFiClient *client = &getNetworkClient();
+  if (client == &plainClient) {
+    plainClient.guardNextRequest();
+    return;
+  }
+  tlsClient.guardNextRequest();
 }
 eki::connectivity::WifiRetrySupervisor wifiRetrySupervisor;
 portMUX_TYPE deviceFaultMux = portMUX_INITIALIZER_UNLOCKED;
@@ -1214,14 +1231,29 @@ PublishResult publishFix(const TelemetryFix &fix) {
   }
 
   recordPublishAttempt();
-  // HTTPClient's destructor closes even a reusable externally owned socket.
-  // Keep the client alive for the publisher's lifetime to avoid a full TLS
-  // certificate verification on every one-second sample.
+  /* keep one parser so its destructor cannot close the reusable socket. */
   static HTTPClient http;
-  http.setConnectTimeout(eki::telemetry::HTTP_CONNECT_TIMEOUT_MS);
-  http.setTimeout(HTTP_TIMEOUT_MS);
-  http.setReuse(true);
-  if (!http.begin(getNetworkClient(), telemetryEndpoint)) {
+  static bool configured = false;
+  if (!configured) {
+    http.setConnectTimeout(eki::telemetry::HTTP_CONNECT_TIMEOUT_MS);
+    http.setTimeout(HTTP_TIMEOUT_MS);
+    http.setReuse(true);
+    http.setFollowRedirects(HTTPC_DISABLE_FOLLOW_REDIRECTS);
+    const char *responseHeaders[] = {
+      "Retry-After",
+      "X-Eki-Server-Received-At",
+      "X-Eki-Server-Responded-At",
+      "Ngrok-Error-Code",
+      "Content-Length",
+      "Transfer-Encoding",
+    };
+    http.collectHeaders(responseHeaders, 6);
+    configured = true;
+  }
+  WiFiClient &networkClient = getNetworkClient();
+  if (!http.begin(networkClient, telemetryEndpoint)) {
+    networkClient.stop();
+    http.end();
     Serial.println("[HTTPS] Unable to initialize telemetry request.");
     scheduleHttpsRetry();
     return eki::telemetry::retryKeepsSampleFresh(
@@ -1231,16 +1263,11 @@ PublishResult publishFix(const TelemetryFix &fix) {
       eki::telemetry::TELEMETRY_FRESHNESS_MARGIN_MS
     ) ? PublishResult::RetryLatest : PublishResult::Dropped;
   }
-  const char *responseHeaders[] = {
-    "Retry-After",
-    "X-Eki-Server-Received-At",
-    "X-Eki-Server-Responded-At",
-    "Ngrok-Error-Code",
-  };
-  http.collectHeaders(responseHeaders, 4);
   http.addHeader("Authorization", authorizationHeader);
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Cache-Control", "no-store");
+  /* guard reuse until httpclient commits the first request write. */
+  guardNetworkClientReuse();
 
   const uint32_t startedAt = millis();
   const int responseCode = http.POST(
@@ -1341,20 +1368,13 @@ PublishResult publishFix(const TelemetryFix &fix) {
       Serial.println("[HTTPS] Backend dependency is unavailable; retaining the latest fix.");
     }
   }
-  // Drain the bounded JSON acknowledgement before issuing another request on
-  // this connection. Unknown/oversized bodies cannot contaminate the next reply.
-  const int responseBytes = http.getSize();
-  if (responseBytes > 0 && responseBytes <= 1024) {
-    const String responseBody = http.getString();
-    if (responseBody.length() != static_cast<size_t>(responseBytes)) {
-      getNetworkClient().stop();
-    }
-  } else if (responseBytes != 0) {
-    getNetworkClient().stop();
-  }
+  /* consume the exact bounded body before retaining this connection. */
+  const bool responseComplete =
+    action == eki::telemetry::HttpResponseAction::Accept &&
+    eki::http::consumeAcceptedResponse<HttpClock>(http, responseCode);
+  if (!responseComplete) networkClient.stop();
   http.end();
   if (action != eki::telemetry::HttpResponseAction::Accept) {
-    getNetworkClient().stop();
     if (action == eki::telemetry::HttpResponseAction::HaltCredentials) {
       latchCredentialFault();
       return PublishResult::CredentialFault;
