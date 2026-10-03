@@ -40,6 +40,10 @@ function sanitize(value: unknown, depth = 0, seen = new WeakSet<object>()): unkn
   return output;
 }
 
+export function sanitizeLogValue(value: unknown): unknown {
+  return sanitize(value);
+}
+
 const destination = pino({
   level: process.env.LOG_LEVEL?.trim() || "info",
   base: undefined,
