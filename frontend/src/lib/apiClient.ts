@@ -1,3 +1,6 @@
+import { recordApiObservation } from "./observability";
+import { statusOutcome } from "./observabilityPolicy";
+
 const API_TIMEOUT_MS = 10_000;
 
 type ApiRequestOptions = RequestInit & {
@@ -71,12 +74,14 @@ export async function apiRequest<T>(
     requestController.abort(new DOMException("Request timed out.", "TimeoutError"));
   }, timeoutMs);
 
+  const observedAt = performance.now();
   try {
     const response = await fetch(`${backendUrl}${path}`, {
       ...init,
       headers,
       signal: requestController.signal,
     });
+    recordApiObservation(path, init.method, performance.now() - observedAt, statusOutcome(response.status));
     if (response.status === 204) return undefined as T;
     let result: T & { error?: unknown; code?: unknown; phase?: unknown };
     try {
@@ -99,6 +104,7 @@ export async function apiRequest<T>(
     return result;
   } catch (error) {
     if (abortSource === "timeout") {
+      recordApiObservation(path, init.method, performance.now() - observedAt, "timeout");
       throw new ApiError(
         "The request timed out. The operation may still complete; retry to reconcile it.",
         "NETWORK_TIMEOUT",
@@ -108,6 +114,7 @@ export async function apiRequest<T>(
       );
     }
     if (error instanceof TypeError) {
+      recordApiObservation(path, init.method, performance.now() - observedAt, "network");
       throw new ApiError(
         "The backend could not be reached. Check the connection and retry.",
         "BACKEND_UNAVAILABLE",
