@@ -1,5 +1,6 @@
 #include "clock_policy.h"
 #include "connectivity_policy.h"
+#include "diagnostic_policy.h"
 #include "firmware_config.h"
 #include "firmware_update_policy.h"
 #include "http_response.h"
@@ -1434,16 +1435,16 @@ void publishRemoteDiagnostic() {
   const HealthCounters counters = healthCounters();
   const eki::reset::ResetStats resets = resetStats;
   const eki::connectivity::FaultCode fault = currentDeviceFault();
-  const uint32_t captureAgeMs = counters.captureSeen
-    ? elapsed(counters.lastCapturedAt)
-    : 0;
-  const uint32_t acceptedAgeMs = counters.acceptedSeen
-    ? elapsed(counters.lastAcceptedAt)
-    : 0;
-  const uint32_t retryAgeMs = elapsed(lastHttpsFailureAt);
-  const uint32_t retryRemainingMs = httpsRetryDelayMs > retryAgeMs
-    ? httpsRetryDelayMs - retryAgeMs
-    : 0;
+  const uint32_t diagnosticNowMs = millis();
+  const uint32_t captureAgeMs = eki::diagnostics::ageMs(
+    diagnosticNowMs, counters.lastCapturedAt, counters.captureSeen
+  );
+  const uint32_t acceptedAgeMs = eki::diagnostics::ageMs(
+    diagnosticNowMs, counters.lastAcceptedAt, counters.acceptedSeen
+  );
+  const uint32_t retryRemainingMs = eki::diagnostics::retryRemainingMs(
+    diagnosticNowMs, lastHttpsFailureAt, httpsRetryDelayMs
+  );
   // This serial evidence is intentionally kept out of the closed diagnostics
   // schema until the backend capacity work defines which fields to retain.
   // captureAgeMs describes an intentional heartbeat/GNSS gap; acceptedAgeMs,
@@ -1462,7 +1463,7 @@ void publishRemoteDiagnostic() {
   );
   JsonDocument document;
   document["firmwareVersion"] = EKI_FIRMWARE_VERSION;
-  document["uptimeMs"] = millis();
+  document["uptimeMs"] = diagnosticNowMs;
   document["freeHeapBytes"] = ESP.getFreeHeap();
   document["rssiDbm"] = WiFi.RSSI();
   document["queueDepth"] = queue.depth;
@@ -1471,6 +1472,14 @@ void publishRemoteDiagnostic() {
   document["queueStaleDrops"] = queue.staleDrops;
   document["acceptedFixes"] = counters.acceptedFixes;
   document["rejectedFixes"] = counters.rejectedFixes;
+  document["capturedFixes"] = counters.capturedFixes;
+  document["publishAttempts"] = counters.publishAttempts;
+  document["scheduledHttpsRetries"] = counters.scheduledHttpsRetries;
+  document["captureSeen"] = counters.captureSeen;
+  document["captureAgeMs"] = captureAgeMs;
+  document["acceptedSeen"] = counters.acceptedSeen;
+  document["acceptedAgeMs"] = acceptedAgeMs;
+  document["retryRemainingMs"] = retryRemainingMs;
   document["nmeaChecksumFailures"] = counters.nmeaChecksumFailures;
   document["uartBufferOverflows"] = counters.uartBufferOverflows;
   document["uartFifoOverflows"] = counters.uartFifoOverflows;
