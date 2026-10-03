@@ -5,14 +5,14 @@ import type { HealthSnapshot } from "./healthState";
 import type { HttpsTelemetryStatus, LatencySummary } from "../services/deviceTelemetryService";
 
 const meter = metrics.getMeter("eki-backend");
-const requestCount = meter.createCounter("http.server.request.count", {
+const requestCount = meter.createCounter("eki.http.server.requests", {
   description: "Completed HTTP server requests.",
 });
-const requestDuration = meter.createHistogram("http.server.request.duration", {
+const requestDuration = meter.createHistogram("eki.http.server.request.duration", {
   description: "HTTP server request duration.",
   unit: "s",
 });
-const activeRequests = meter.createUpDownCounter("http.server.active_requests", {
+const activeRequests = meter.createUpDownCounter("eki.http.server.active_requests", {
   description: "Currently active HTTP server requests.",
 });
 const authAttempts = meter.createCounter("eki.auth.attempts", {
@@ -23,6 +23,48 @@ const backgroundFailureCount = meter.createCounter("eki.background.failures", {
 });
 const workerRuns = meter.createCounter("eki.worker.runs", {
   description: "Background worker run outcomes.",
+});
+
+const frontendApiDuration = meter.createHistogram("eki.frontend.api.request.duration", {
+  description: "Observed browser API request duration.",
+  unit: "s",
+});
+const frontendWebVitalDuration = meter.createHistogram("eki.frontend.web_vital.duration", {
+  description: "Browser Web Vital duration values.",
+  unit: "s",
+});
+const frontendLayoutShift = meter.createHistogram("eki.frontend.web_vital.cls", {
+  description: "Browser Cumulative Layout Shift values.",
+  unit: "1",
+});
+const frontendErrors = meter.createCounter("eki.frontend.errors", {
+  description: "Privacy-bounded browser runtime errors.",
+});
+const hardwareDiagnosticReports = meter.createCounter("eki.hardware.diagnostic.reports", {
+  description: "Accepted authenticated device diagnostic reports.",
+});
+const hardwareEvents = meter.createCounter("eki.hardware.events", {
+  description: "Device counter deltas derived from consecutive diagnostic reports.",
+});
+const hardwareFreeHeap = meter.createHistogram("eki.hardware.free_heap", {
+  description: "ESP32 free heap sampled by authenticated diagnostics.",
+  unit: "By",
+});
+const hardwareRssi = meter.createHistogram("eki.hardware.wifi.rssi", {
+  description: "ESP32 Wi-Fi RSSI sampled by authenticated diagnostics.",
+  unit: "dBm",
+});
+const hardwareQueueDepth = meter.createHistogram("eki.hardware.telemetry.queue_depth", {
+  description: "ESP32 telemetry queue depth sampled by authenticated diagnostics.",
+  unit: "{sample}",
+});
+const hardwareDeliveryAge = meter.createHistogram("eki.hardware.telemetry.last_accepted_age", {
+  description: "Age of the last accepted telemetry response observed by firmware.",
+  unit: "ms",
+});
+const hardwareRetryRemaining = meter.createHistogram("eki.hardware.telemetry.retry_remaining", {
+  description: "Remaining firmware telemetry retry delay.",
+  unit: "ms",
 });
 
 let workerLeader = 0;
@@ -147,4 +189,95 @@ export function registerOperationalMetrics(readers: {
   meter.createObservableGauge("eki.background.sustained_sources", {
     description: "Number of background sources currently failing persistently.",
   }).addCallback(result => result.observe(readers.background().sustainedSources.length));
+}
+
+
+type HardwareDiagnosticMetrics = {
+  freeHeapBytes: number;
+  rssiDbm: number;
+  queueDepth: number;
+  acceptedFixes: number;
+  rejectedFixes: number;
+  queueOverflowDrops: number;
+  queueStaleDrops: number;
+  scheduledHttpsRetries: number;
+  resetTotal: number;
+  acceptedSeen: boolean;
+  acceptedAgeMs: number;
+  retryRemainingMs: number;
+  fault: "none" | "credential-rejected";
+  flashEncryption: boolean;
+  secureBoot: boolean;
+};
+
+const hardwareCounterState = new Map<string, Pick<HardwareDiagnosticMetrics,
+  "acceptedFixes" | "rejectedFixes" | "queueOverflowDrops" | "queueStaleDrops" |
+  "scheduledHttpsRetries" | "resetTotal">>();
+const MAX_HARDWARE_COUNTER_DEVICES = 5_000;
+
+export function diagnosticCounterDelta(previous: number | undefined, current: number): number {
+  if (previous === undefined) return 0;
+  return current >= previous ? current - previous : current;
+}
+
+export function recordDeviceDiagnosticMetrics(deviceId: string, value: HardwareDiagnosticMetrics): void {
+  hardwareDiagnosticReports.add(1, {
+    fault: value.fault,
+    "eki.hardware.flash_encryption": value.flashEncryption,
+    "eki.hardware.secure_boot": value.secureBoot,
+  });
+  hardwareFreeHeap.record(value.freeHeapBytes);
+  hardwareRssi.record(value.rssiDbm);
+  hardwareQueueDepth.record(value.queueDepth);
+  if (value.acceptedSeen) hardwareDeliveryAge.record(value.acceptedAgeMs);
+  hardwareRetryRemaining.record(value.retryRemainingMs);
+
+  const previous = hardwareCounterState.get(deviceId);
+  const counters = {
+    acceptedFixes: value.acceptedFixes,
+    rejectedFixes: value.rejectedFixes,
+    queueOverflowDrops: value.queueOverflowDrops,
+    queueStaleDrops: value.queueStaleDrops,
+    scheduledHttpsRetries: value.scheduledHttpsRetries,
+    resetTotal: value.resetTotal,
+  };
+  if (previous) {
+    const names = Object.keys(counters) as Array<keyof typeof counters>;
+    for (const name of names) {
+      const delta = diagnosticCounterDelta(previous[name], counters[name]);
+      if (delta > 0) hardwareEvents.add(delta, { event: name });
+    }
+  }
+  if (!previous && hardwareCounterState.size >= MAX_HARDWARE_COUNTER_DEVICES) {
+    const oldest = hardwareCounterState.keys().next().value as string | undefined;
+    if (oldest) hardwareCounterState.delete(oldest);
+  }
+  hardwareCounterState.delete(deviceId);
+  hardwareCounterState.set(deviceId, counters);
+}
+
+export function recordFrontendWebVitalMetric(
+  name: "CLS" | "FCP" | "FID" | "INP" | "LCP" | "TTFB",
+  value: number,
+  rating: "good" | "needs-improvement" | "poor",
+): void {
+  if (name === "CLS") frontendLayoutShift.record(value, { rating });
+  else frontendWebVitalDuration.record(value / 1_000, { name, rating });
+}
+
+export function recordFrontendApiMetric(
+  route: string,
+  method: string,
+  durationMs: number,
+  outcome: string,
+): void {
+  frontendApiDuration.record(durationMs / 1_000, {
+    "http.route": route,
+    "http.request.method": method,
+    outcome,
+  });
+}
+
+export function recordFrontendErrorMetric(kind: "window_error" | "unhandled_rejection"): void {
+  frontendErrors.add(1, { "error.type": kind });
 }
