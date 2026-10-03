@@ -1,18 +1,20 @@
 services:
-  otel-collector:
-    image: otel/opentelemetry-collector:0.161.0
-    command: ["--config=/etc/otelcol/config.yaml"]
-    volumes:
-      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+  lgtm:
+    image: grafana/otel-lgtm:0.34.0
     ports:
+      - "127.0.0.1:3000:3000"
       - "127.0.0.1:4317:4317"
       - "127.0.0.1:4318:4318"
-    depends_on:
-      - jaeger
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /otel-lgtm/grafana/conf/provisioning/dashboards/custom/eki-backend-dashboard.json
+    volumes:
+      - lgtm-data:/data
+      - ./grafana/dashboards-provisioning.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/custom.yaml:ro
+      - ./grafana/eki-backend-dashboard.json:/otel-lgtm/grafana/conf/provisioning/dashboards/custom/eki-backend-dashboard.json:ro
     restart: unless-stopped
 
-  jaeger:
-    image: jaegertracing/jaeger:2.21.0
-    ports:
-      - "127.0.0.1:16686:16686"
-    restart: unless-stopped
+volumes:
+  lgtm-data:
