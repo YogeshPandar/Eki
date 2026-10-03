@@ -61,6 +61,7 @@ available during the rollout.
 | Ride operations | `POST /api/shifts/start`, `PATCH /api/shifts/delay`, `POST /api/shifts/stop` | Assigned operator or admin |
 | Boarding and chat | Session boarding-code, join and messages endpoints | Session member/operator/admin as applicable |
 | Passenger/account | Feedback, bootstrap, privacy deletion, requests | Authenticated/admin as noted below |
+| Observability | `POST /api/observability/frontend` | Authenticated browser RUM |
 | Fleet and settings | Fleet, analytics, route, settings and places endpoints | Admin unless noted below |
 | Route planning | `POST /api/plan`, `GET /api/routes-list` | Authenticated |
 
@@ -201,7 +202,7 @@ background work and cannot change that acknowledgement contract.
 
 ### `POST /api/devices/:deviceId/diagnostics` — device
 
-Accepts the closed 1 KiB firmware-health object: firmware version, uptime, free heap, RSSI, queue depth/high-water/drop counters, accepted/rejected fixes, NMEA/UART errors, reset total, fault code, flash-encryption and Secure-Boot booleans, and device timestamp. Device ID, bus, and route come from the authenticated server registry; credentials and network names are never accepted in the body. The latest report overwrites `_device_diagnostics/{deviceId}` through the Admin SDK. Returns 202, 400, 401, 429, or 503 with `Cache-Control: no-store`.
+Accepts the closed 1 KiB firmware-health object: firmware version, uptime, free heap, RSSI, queue depth/high-water/drop counters, accepted/rejected/captured fixes, publish/retry counters, capture/accept ages, retry remaining, NMEA/UART errors, reset total, fault code, flash-encryption and Secure-Boot booleans, and device timestamp. Device ID, bus, and route come from the authenticated server registry; credentials and network names are never accepted in the body. The latest report overwrites `_device_diagnostics/{deviceId}` through the Admin SDK. Returns 202, 400, 401, 429, or 503 with `Cache-Control: no-store`.
 
 ### `GET /api/devices/:deviceId/firmware?sequence=N` — device
 
@@ -216,6 +217,10 @@ sends its credential to the artifact host.
 ### `GET /api/devices/:deviceId/diagnostics` — admin
 
 Returns the latest authenticated device report plus registry assignment and server `receivedAt`, or 404 when no report exists. Firebase clients cannot read `_device_diagnostics` directly.
+
+### `POST /api/observability/frontend` — authenticated
+
+Accepts 1–50 sampled browser events with a closed schema: Core Web Vital values/ratings, normalized API route templates/method/outcome/duration, or coarse runtime-error kind. Query values, full URLs, user IDs, error messages and stacks are not accepted. The backend translates the batch into OpenTelemetry metrics, bounded trace events and aggregate error logs. Returns 202, 400, 401, 429, or 503.
 
 ### `PUT /api/devices/:deviceId` — admin
 
