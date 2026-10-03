@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthProvider } from "@/hooks/useAuth";
+import FrontendObservability from "@/components/FrontendObservability";
 
 /**
  * Root providers — intentionally lean.
@@ -14,5 +15,10 @@ import { AuthProvider } from "@/hooks/useAuth";
  * rather than here as a side-effect import, so it no longer blocks LCP.
  */
 export default function Providers({ children }: { children: React.ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      <FrontendObservability />
+      {children}
+    </AuthProvider>
+  );
 }
