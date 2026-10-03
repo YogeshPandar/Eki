@@ -51,7 +51,7 @@ export function parseFrontendObservabilityBatch(value: unknown): FrontendObserva
         event.value < 0 || event.value > 600_000 ||
         typeof event.rating !== "string" || !RATINGS.has(event.rating)
       ) return null;
-      parsed.push(event as FrontendObservabilityEvent);
+      parsed.push(event as unknown as FrontendObservabilityEvent);
       continue;
     }
     if (event.type === "api") {
@@ -63,7 +63,7 @@ export function parseFrontendObservabilityBatch(value: unknown): FrontendObserva
         event.durationMs < 0 || event.durationMs > 120_000 ||
         typeof event.outcome !== "string" || !OUTCOMES.has(event.outcome)
       ) return null;
-      parsed.push(event as FrontendObservabilityEvent);
+      parsed.push(event as unknown as FrontendObservabilityEvent);
       continue;
     }
     if (event.type === "error") {
@@ -71,7 +71,7 @@ export function parseFrontendObservabilityBatch(value: unknown): FrontendObserva
         Object.keys(event).length !== 2 ||
         typeof event.kind !== "string" || !ERROR_KINDS.has(event.kind)
       ) return null;
-      parsed.push(event as FrontendObservabilityEvent);
+      parsed.push(event as unknown as FrontendObservabilityEvent);
       continue;
     }
     return null;
