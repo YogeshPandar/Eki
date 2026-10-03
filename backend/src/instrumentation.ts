@@ -11,8 +11,10 @@ let sdk: NodeSDK | null = null;
 
 function hasOtlpEndpoint(env: NodeJS.ProcessEnv): boolean {
   return Boolean(
-    env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim() ||
-      env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim(),
+    env.OTEL_EXPORTER_OTLP_ENDPOINT?.trim() ||
+      env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?.trim() ||
+      env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT?.trim() ||
+      env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT?.trim(),
   );
 }
 
