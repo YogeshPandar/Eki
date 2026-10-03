@@ -660,7 +660,7 @@
         },
         "x-auth-class": "device",
         "x-body-limit-bytes": 512,
-        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 \u00c3\u2014 HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 \u00c3\u2014 configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
+        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 Ã— HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 Ã— configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
         "x-cache-policy": "Handler emits Cache-Control: no-store. Earlier middleware/parser rejections may occur before that header.",
         "x-timeout-policy": "HTTP request-body receipt timeout 15000 ms (not a handler execution deadline); header timeout 70000 ms. No general handler deadline; clients use bounded timeouts and reconcile uncertain writes.",
         "x-retry-policy": "Do not blindly retry 400/401/403/409/422. On 429 obey Retry-After when present. Retry transient failures with bounded exponential backoff and jitter only when the operation idempotency policy permits.",
@@ -783,7 +783,7 @@
         },
         "x-auth-class": "device",
         "x-body-limit-bytes": 1024,
-        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 \u00c3\u2014 HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 \u00c3\u2014 configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
+        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 Ã— HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 Ã— configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
         "x-cache-policy": "Handler emits Cache-Control: no-store. Earlier middleware/parser rejections may occur before that header.",
         "x-timeout-policy": "HTTP request-body receipt timeout 15000 ms (not a handler execution deadline); header timeout 70000 ms. No general handler deadline; clients use bounded timeouts and reconcile uncertain writes.",
         "x-retry-policy": "Do not blindly retry 400/401/403/409/422. On 429 obey Retry-After when present. Retry transient failures with bounded exponential backoff and jitter only when the operation idempotency policy permits.",
@@ -1039,7 +1039,7 @@
         },
         "x-auth-class": "device",
         "x-body-limit-bytes": 16384,
-        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 \u00c3\u2014 HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 \u00c3\u2014 configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
+        "x-rate-limit": "Bypasses global/write limiters. Pre-auth IP budget per 10s: telemetry 15 Ã— HTTPS_INGRESS_DEVICES_PER_IP (default 100), diagnostics/firmware separate pools 2 Ã— configured devices; divided by replica shard factor. Telemetry additionally uses authenticated device budget HTTPS_DEVICE_RATE_PER_MINUTE (default 90) via distributed RTDB token leases. Local mode requires one replica.",
         "x-cache-policy": "Handler emits Cache-Control: no-store. Earlier middleware/parser rejections may occur before that header.",
         "x-timeout-policy": "HTTP request-body receipt timeout 15000 ms (not a handler execution deadline); header timeout 70000 ms. No general handler deadline; clients use bounded timeouts and reconcile uncertain writes.",
         "x-retry-policy": "Do not blindly retry 400/401/403/409/422. On 429 obey Retry-After when present. Retry transient failures with bounded exponential backoff and jitter only when the operation idempotency policy permits.",
@@ -1624,6 +1624,33 @@
               }
             }
           },
+          "409": {
+            "description": "Another reconciliation is active or awaits recovery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Retry interval"
+              }
+            }
+          },
           "413": {
             "description": "Raw JSON request exceeds the configured body limit.",
             "content": {
@@ -1669,33 +1696,6 @@
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 }
-              }
-            }
-          },
-          "409": {
-            "description": "Another reconciliation is active or awaits recovery",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "schema": {
-                  "type": "string"
-                },
-                "description": "Retry interval"
               }
             }
           }
@@ -2274,7 +2274,7 @@
           "Routes"
         ],
         "summary": "Compute bounded directional geometry preview",
-        "description": "Billable server-side Google Routes request using field masks; accepts 2\u00e2\u20ac\u201c100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
+        "description": "Billable server-side Google Routes request using field masks; accepts 2â€“100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
         "security": [
           {
             "FirebaseBearer": []
@@ -3633,7 +3633,7 @@
           "Places"
         ],
         "summary": "Search bounded place candidates using the server key",
-        "description": "Trims query to 3\u00e2\u20ac\u201c200 characters; server-key Places field mask returns at most five normalized candidates. Empty results are valid. Redacted structured errors include code/phase; upstream 429 maps to 503.",
+        "description": "Trims query to 3â€“200 characters; server-key Places field mask returns at most five normalized candidates. Empty results are valid. Redacted structured errors include code/phase; upstream 429 maps to 503.",
         "security": [
           {
             "FirebaseBearer": []
@@ -4931,7 +4931,7 @@
           "Feedback"
         ],
         "summary": "Submit authorized feedback with cooldown and replay protection",
-        "description": "General feedback requires nonempty comment; ride feedback requires completed session membership and matching bus/driver, plus rating 1\u00e2\u20ac\u201c5 or nonempty comment. Comments <=200 words and <=2000 trimmed characters. Identity/name derived from token/profile. General feedback ignores rating/ride identifiers after type checks.",
+        "description": "General feedback requires nonempty comment; ride feedback requires completed session membership and matching bus/driver, plus rating 1â€“5 or nonempty comment. Comments <=200 words and <=2000 trimmed characters. Identity/name derived from token/profile. General feedback ignores rating/ride identifiers after type checks.",
         "security": [
           {
             "FirebaseBearer": []
@@ -6368,6 +6368,16 @@
               }
             }
           },
+          "410": {
+            "description": "Original keyed session was deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "413": {
             "description": "Raw JSON request exceeds the configured body limit.",
             "content": {
@@ -6418,16 +6428,6 @@
           },
           "503": {
             "description": "Dependency unavailable, busy authentication verifier, or missing safe server configuration.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Original keyed session was deleted.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6532,6 +6532,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session missing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Lifecycle, version, assignment, or idempotency conflict; reconcile before retry.",
             "content": {
@@ -6582,16 +6592,6 @@
           },
           "503": {
             "description": "Dependency unavailable, busy authentication verifier, or missing safe server configuration.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session missing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7839,91 +7839,13 @@
           "Routes"
         ],
         "summary": "Compute bounded directional geometry preview",
-        "description": "Billable server-side Google Routes request using field masks; accepts 2\u00e2\u20ac\u201c100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
+        "description": "Billable server-side Google Routes request using field masks; accepts 2â€“100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
         "security": [
           {
             "FirebaseBearer": []
           }
         ],
         "responses": {
-          "401": {
-            "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Authenticated caller lacks the required role, assignment, proximity, or membership.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Raw JSON request exceeds the configured body limit.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit exceeded; obey Retry-After when supplied.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds before retry when emitted by the rejecting limiter; not supplied by every upstream failure.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
           "200": {
             "description": "Durable operation snapshot",
             "content": {
@@ -7970,6 +7892,84 @@
                 "description": "Status resource",
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated caller lacks the required role, assignment, proximity, or membership.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Raw JSON request exceeds the configured body limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded; obey Retry-After when supplied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retry when emitted by the rejecting limiter; not supplied by every upstream failure.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -8043,13 +8043,42 @@
           "Routes"
         ],
         "summary": "Compute bounded directional geometry preview",
-        "description": "Billable server-side Google Routes request using field masks; accepts 2\u00e2\u20ac\u201c100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
+        "description": "Billable server-side Google Routes request using field masks; accepts 2â€“100 coordinates, retains order, computes both directions. Do not introduce this call into runtime route-segment reads.",
         "security": [
           {
             "FirebaseBearer": []
           }
         ],
         "responses": {
+          "200": {
+            "description": "Durable operation snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeometryPreviewOperation"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "1 while processing",
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
             "content": {
@@ -8066,6 +8095,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
                 }
               }
             }
@@ -8104,45 +8143,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Durable operation snapshot",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/GeometryPreviewOperation"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "description": "1 while processing",
-                "schema": {
-                  "type": "string",
-                  "const": "1"
                 }
               }
             }
@@ -8182,84 +8182,6 @@
           }
         ],
         "responses": {
-          "401": {
-            "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Authenticated caller lacks the required role, assignment, proximity, or membership.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "Raw JSON request exceeds the configured body limit.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit exceeded; obey Retry-After when supplied.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "description": "Seconds before retry when emitted by the rejecting limiter; not supplied by every upstream failure.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
           "200": {
             "description": "Durable operation snapshot",
             "content": {
@@ -8306,6 +8228,84 @@
                 "description": "Status resource",
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated caller lacks the required role, assignment, proximity, or membership.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Raw JSON request exceeds the configured body limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded; obey Retry-After when supplied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retry when emitted by the rejecting limiter; not supplied by every upstream failure.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -8356,6 +8356,35 @@
           }
         ],
         "responses": {
+          "200": {
+            "description": "Durable operation snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetReconciliationOperation"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "1 while processing",
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
+                }
+              }
+            }
+          },
           "401": {
             "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
             "content": {
@@ -8372,6 +8401,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Invalid request, missing operation, key conflict or unavailable storage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationError"
                 }
               }
             }
@@ -8413,45 +8452,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Invalid request, missing operation, key conflict or unavailable storage",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OperationError"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Durable operation snapshot",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FleetReconciliationOperation"
-                }
-              }
-            },
-            "headers": {
-              "Retry-After": {
-                "description": "1 while processing",
-                "schema": {
-                  "type": "string",
-                  "const": "1"
-                }
-              }
-            }
           }
         },
         "x-auth-class": "admin",
@@ -8472,6 +8472,101 @@
             }
           }
         ]
+      }
+    },
+    "/api/observability/frontend": {
+      "post": {
+        "operationId": "postFrontendObservability",
+        "tags": [
+          "Observability"
+        ],
+        "summary": "Ingest privacy-bounded authenticated browser observability events",
+        "description": "Accepts only closed Web Vital, normalized API timing, and coarse runtime-error records. Raw URLs, queries, user IDs, messages and stacks are not part of the schema.",
+        "security": [
+          {
+            "FirebaseBearer": []
+          }
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrontendObservabilityBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted observability batch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrontendObservabilityAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid observability payload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, revoked, disabled, or malformed credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Raw JSON request exceeds the configured body limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication verifier or dependency unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-auth-class": "user",
+        "x-body-limit-bytes": 16384,
+        "x-rate-limit": "Dedicated observability limiter: 30 requests/identity/minute, divided by RATE_LIMIT_SHARD_FACTOR; global 200 requests/identity/minute also applies.",
+        "x-cache-policy": "No response caching; the endpoint accepts transient telemetry only.",
+        "x-timeout-policy": "HTTP request-body receipt timeout 15000 ms; event processing is synchronous and does not call an external dependency after authentication.",
+        "x-retry-policy": "Browser batches retry only transient network/5xx failures; 4xx payload/auth failures are not replayed.",
+        "x-idempotency": "Metrics/logs are at-least-once observations; retries may duplicate a batch, so consumers aggregate statistically rather than as transactional counts."
       }
     }
   },
@@ -9299,7 +9394,7 @@
               "number",
               "null"
             ],
-            "description": "Ride feedback: integer 1\u00e2\u20ac\u201c5 or null; general feedback: numeric type is checked but value is ignored."
+            "description": "Ride feedback: integer 1â€“5 or null; general feedback: numeric type is checked but value is ignored."
           },
           "sessionId": {
             "type": "string",
@@ -9710,7 +9805,7 @@
             "type": "string",
             "maxLength": 2000,
             "minLength": 1,
-            "description": "Raw input <=2000 UTF-16 code units. After Unicode normalization it must contain 1\u00e2\u20ac\u201c500 Unicode code points; unsafe formatting is removed and profanity censored."
+            "description": "Raw input <=2000 UTF-16 code units. After Unicode normalization it must contain 1â€“500 Unicode code points; unsafe formatting is removed and profanity censored."
           },
           "requestId": {
             "type": "string",
@@ -10472,6 +10567,42 @@
             "type": "integer",
             "minimum": 1700000000000,
             "maximum": 9999999999999
+          },
+          "capturedFixes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "publishAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "scheduledHttpsRetries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "captureSeen": {
+            "type": "boolean"
+          },
+          "captureAgeMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "acceptedSeen": {
+            "type": "boolean"
+          },
+          "acceptedAgeMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "retryRemainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 300000
           }
         },
         "required": [
@@ -10485,6 +10616,14 @@
           "queueStaleDrops",
           "acceptedFixes",
           "rejectedFixes",
+          "capturedFixes",
+          "publishAttempts",
+          "scheduledHttpsRetries",
+          "captureSeen",
+          "captureAgeMs",
+          "acceptedSeen",
+          "acceptedAgeMs",
+          "retryRemainingMs",
           "nmeaChecksumFailures",
           "uartBufferOverflows",
           "uartFifoOverflows",
@@ -10631,6 +10770,42 @@
                 "type": "null"
               }
             ]
+          },
+          "capturedFixes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "publishAttempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "scheduledHttpsRetries": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "captureSeen": {
+            "type": "boolean"
+          },
+          "captureAgeMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "acceptedSeen": {
+            "type": "boolean"
+          },
+          "acceptedAgeMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4294967295
+          },
+          "retryRemainingMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 300000
           }
         },
         "required": [
@@ -10644,6 +10819,14 @@
           "queueStaleDrops",
           "acceptedFixes",
           "rejectedFixes",
+          "capturedFixes",
+          "publishAttempts",
+          "scheduledHttpsRetries",
+          "captureSeen",
+          "captureAgeMs",
+          "acceptedSeen",
+          "acceptedAgeMs",
+          "retryRemainingMs",
           "nmeaChecksumFailures",
           "uartBufferOverflows",
           "uartFifoOverflows",
@@ -10957,6 +11140,147 @@
           "distanceMeters",
           "duration",
           "polylineQuality"
+        ],
+        "additionalProperties": false
+      },
+      "FrontendObservabilityBatch": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 50,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "web_vital"
+                    },
+                    "name": {
+                      "type": "string",
+                      "enum": [
+                        "CLS",
+                        "FCP",
+                        "FID",
+                        "INP",
+                        "LCP",
+                        "TTFB"
+                      ]
+                    },
+                    "value": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 600000
+                    },
+                    "rating": {
+                      "type": "string",
+                      "enum": [
+                        "good",
+                        "needs-improvement",
+                        "poor"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "name",
+                    "value",
+                    "rating"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "api"
+                    },
+                    "route": {
+                      "type": "string",
+                      "pattern": "^/[A-Za-z0-9_/:.\\-]{1,120}$"
+                    },
+                    "method": {
+                      "type": "string",
+                      "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "PATCH",
+                        "DELETE",
+                        "HEAD",
+                        "OPTIONS",
+                        "_OTHER"
+                      ]
+                    },
+                    "durationMs": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 120000
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "2xx",
+                        "3xx",
+                        "4xx",
+                        "5xx",
+                        "timeout",
+                        "network",
+                        "other"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "route",
+                    "method",
+                    "durationMs",
+                    "outcome"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "const": "error"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "window_error",
+                        "unhandled_rejection"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "FrontendObservabilityAccepted": {
+        "type": "object",
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "accepted"
         ],
         "additionalProperties": false
       }
