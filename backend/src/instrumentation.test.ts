@@ -6,11 +6,17 @@ describe("OpenTelemetry configuration", () => {
     expect(isTelemetryEnabled({})).toBe(false);
   });
 
-  it("accepts either the shared or trace-specific OTLP endpoint", () => {
+  it("accepts shared or signal-specific OTLP endpoints", () => {
     expect(isTelemetryEnabled({ OTEL_EXPORTER_OTLP_ENDPOINT: "http://collector:4318" }))
       .toBe(true);
     expect(isTelemetryEnabled({
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://collector:4318/v1/traces",
+    })).toBe(true);
+    expect(isTelemetryEnabled({
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: "http://collector:4318/v1/metrics",
+    })).toBe(true);
+    expect(isTelemetryEnabled({
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: "http://collector:4318/v1/logs",
     })).toBe(true);
   });
 
