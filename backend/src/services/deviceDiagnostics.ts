@@ -1,5 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../lib/firebaseAdmin";
+import { recordDeviceDiagnosticMetrics } from "../lib/metrics";
 import { authenticateDeviceCredentials } from "./deviceTelemetryService";
 
 const DIAGNOSTIC_KEYS = [
@@ -13,6 +14,14 @@ const DIAGNOSTIC_KEYS = [
   "queueStaleDrops",
   "acceptedFixes",
   "rejectedFixes",
+  "capturedFixes",
+  "publishAttempts",
+  "scheduledHttpsRetries",
+  "captureSeen",
+  "captureAgeMs",
+  "acceptedSeen",
+  "acceptedAgeMs",
+  "retryRemainingMs",
   "nmeaChecksumFailures",
   "uartBufferOverflows",
   "uartFifoOverflows",
@@ -34,6 +43,14 @@ export interface DeviceDiagnosticsPayload {
   queueStaleDrops: number;
   acceptedFixes: number;
   rejectedFixes: number;
+  capturedFixes: number;
+  publishAttempts: number;
+  scheduledHttpsRetries: number;
+  captureSeen: boolean;
+  captureAgeMs: number;
+  acceptedSeen: boolean;
+  acceptedAgeMs: number;
+  retryRemainingMs: number;
   nmeaChecksumFailures: number;
   uartBufferOverflows: number;
   uartFifoOverflows: number;
@@ -83,6 +100,14 @@ export function parseDeviceDiagnosticsValue(value: unknown): ParseResult {
     !isBoundedInteger(record.queueStaleDrops, 0, 0xFFFFFFFF) ||
     !isBoundedInteger(record.acceptedFixes, 0, 0xFFFFFFFF) ||
     !isBoundedInteger(record.rejectedFixes, 0, 0xFFFFFFFF) ||
+    !isBoundedInteger(record.capturedFixes, 0, 0xFFFFFFFF) ||
+    !isBoundedInteger(record.publishAttempts, 0, 0xFFFFFFFF) ||
+    !isBoundedInteger(record.scheduledHttpsRetries, 0, 0xFFFFFFFF) ||
+    typeof record.captureSeen !== "boolean" ||
+    !isBoundedInteger(record.captureAgeMs, 0, 0xFFFFFFFF) ||
+    typeof record.acceptedSeen !== "boolean" ||
+    !isBoundedInteger(record.acceptedAgeMs, 0, 0xFFFFFFFF) ||
+    !isBoundedInteger(record.retryRemainingMs, 0, 5 * 60 * 1000) ||
     !isBoundedInteger(record.nmeaChecksumFailures, 0, 0xFFFFFFFF) ||
     !isBoundedInteger(record.uartBufferOverflows, 0, 0xFFFFFFFF) ||
     !isBoundedInteger(record.uartFifoOverflows, 0, 0xFFFFFFFF) ||
@@ -111,5 +136,6 @@ export async function ingestDeviceDiagnostics(
     routeId: assignment.routeId,
     receivedAt: FieldValue.serverTimestamp(),
   });
+  recordDeviceDiagnosticMetrics(deviceId, diagnostics);
   return true;
 }
