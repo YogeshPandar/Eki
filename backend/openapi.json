@@ -8562,7 +8562,7 @@
         },
         "x-auth-class": "user",
         "x-body-limit-bytes": 16384,
-        "x-rate-limit": "Dedicated observability limiter: 30 requests/identity/minute, divided by RATE_LIMIT_SHARD_FACTOR; global 200 requests/identity/minute also applies.",
+        "x-rate-limit": "Dedicated pre-auth IP observability limiter: 30 requests/IP/minute, divided by RATE_LIMIT_SHARD_FACTOR; global pre-auth IP limit also applies. Firebase authentication is then required by the route.",
         "x-cache-policy": "No response caching; the endpoint accepts transient telemetry only.",
         "x-timeout-policy": "HTTP request-body receipt timeout 15000 ms; event processing is synchronous and does not call an external dependency after authentication.",
         "x-retry-policy": "Browser batches retry only transient network/5xx failures; 4xx payload/auth failures are not replayed.",
