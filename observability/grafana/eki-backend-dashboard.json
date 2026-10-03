@@ -1,5 +1,7 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -8,121 +10,565 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(http_server_request_count_total{service_name=\"eki-backend\"}[5m]))", "refId": "A" }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(eki_http_server_requests_total{service_name=\"eki-backend\"}[5m]))",
+          "refId": "A"
+        }
+      ],
       "title": "Request rate",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "max": 1, "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.02 }, { "color": "red", "value": 0.05 }] }, "unit": "percentunit" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.02
+              },
+              {
+                "color": "red",
+                "value": 0.05
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
       "id": 2,
-      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "sum(rate(http_server_request_count_total{service_name=\"eki-backend\",http_response_status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(http_server_request_count_total{service_name=\"eki-backend\"}[5m])), 0.001)", "refId": "A" }],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(eki_http_server_requests_total{service_name=\"eki-backend\",http_response_status_class=\"5xx\"}[5m])) / clamp_min(sum(rate(eki_http_server_requests_total{service_name=\"eki-backend\"}[5m])), 0.001)",
+          "refId": "A"
+        }
+      ],
       "title": "5xx error ratio",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
       "id": 3,
-      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket{service_name=\"eki-backend\"}[5m])))", "refId": "A" }],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(eki_http_server_request_duration_seconds_bucket{service_name=\"eki-backend\"}[5m])))",
+          "refId": "A"
+        }
+      ],
       "title": "p95 request latency",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }, "unit": "bool" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "bool"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
       "id": 4,
-      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
-      "targets": [{ "expr": "min(eki_dependency_ready{service_name=\"eki-backend\"})", "legendFormat": "all dependencies", "refId": "A" }],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "min(eki_dependency_ready{service_name=\"eki-backend\"})",
+          "legendFormat": "all dependencies",
+          "refId": "A"
+        }
+      ],
       "title": "Firebase readiness",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
       "id": 5,
-      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
-        { "expr": "rate(eki_device_telemetry_accepted_total{service_name=\"eki-backend\"}[5m])", "legendFormat": "accepted", "refId": "A" },
-        { "expr": "rate(eki_device_telemetry_rejected_total{service_name=\"eki-backend\"}[5m])", "legendFormat": "rejected", "refId": "B" }
+        {
+          "expr": "rate(eki_device_telemetry_accepted_total{service_name=\"eki-backend\"}[5m])",
+          "legendFormat": "accepted",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(eki_device_telemetry_rejected_total{service_name=\"eki-backend\"}[5m])",
+          "legendFormat": "rejected",
+          "refId": "B"
+        }
       ],
       "title": "Device telemetry throughput",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
       "id": 6,
-      "options": { "legend": { "calcs": [], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
-      "targets": [{ "expr": "eki_device_telemetry_latency{service_name=\"eki-backend\",statistic=\"p95\"}", "legendFormat": "{{stage}}", "refId": "A" }],
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "eki_device_telemetry_latency{service_name=\"eki-backend\",statistic=\"p95\"}",
+          "legendFormat": "{{stage}}",
+          "refId": "A"
+        }
+      ],
       "title": "Device pipeline p95 latency",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 13 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 13
+      },
       "id": 7,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
-      "targets": [{ "expr": "sum by (source) (rate(eki_background_failures_total{service_name=\"eki-backend\"}[5m]))", "legendFormat": "{{source}}", "refId": "A" }],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (source) (rate(eki_background_failures_total{service_name=\"eki-backend\"}[5m]))",
+          "legendFormat": "{{source}}",
+          "refId": "A"
+        }
+      ],
       "title": "Background failure rate",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "min": 0 }, "overrides": [] },
-      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 13 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 13
+      },
       "id": 8,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
-        { "expr": "eki_worker_leader{service_name=\"eki-backend\"}", "legendFormat": "leader", "refId": "A" },
-        { "expr": "eki_background_sustained_sources{service_name=\"eki-backend\"}", "legendFormat": "sustained failures", "refId": "B" }
+        {
+          "expr": "eki_worker_leader{service_name=\"eki-backend\"}",
+          "legendFormat": "leader",
+          "refId": "A"
+        },
+        {
+          "expr": "eki_background_sustained_sources{service_name=\"eki-backend\"}",
+          "legendFormat": "sustained failures",
+          "refId": "B"
+        }
       ],
       "title": "Worker health",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "$prometheus" },
-      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
-      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 13 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 13
+      },
       "id": 9,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
-      "targets": [{ "expr": "eki_process_heap_used_bytes{service_name=\"eki-backend\"}", "legendFormat": "heap used", "refId": "A" }],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "expr": "eki_process_heap_used_bytes{service_name=\"eki-backend\"}",
+          "legendFormat": "heap used",
+          "refId": "A"
+        }
+      ],
       "title": "Node.js heap",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "loki", "uid": "$loki" },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
-      "id": 10,
-      "options": { "dedupStrategy": "none", "enableInfiniteScrolling": false, "enableLogDetails": true, "prettifyLogMessage": false, "showCommonLabels": false, "showLabels": false, "showTime": true, "sortOrder": "Descending", "wrapLogMessage": true },
-      "targets": [{ "expr": "{service_name=\"eki-backend\"}", "refId": "A" }],
-      "title": "Correlated application logs",
-      "type": "logs"
+      "id": 101,
+      "type": "timeseries",
+      "title": "Frontend API p95 latency",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(eki_frontend_api_request_duration_seconds_bucket{service_name=\"eki-backend\"}[5m])))"
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "timeseries",
+      "title": "Frontend runtime errors",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (error_type) (rate(eki_frontend_errors_total{service_name=\"eki-backend\"}[5m]))"
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "timeseries",
+      "title": "Core Web Vitals",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, name) (rate(eki_frontend_web_vital_duration_seconds_bucket{service_name=\"eki-backend\"}[10m])))"
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "type": "timeseries",
+      "title": "ESP32 free heap",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(eki_hardware_free_heap_bytes_bucket{service_name=\"eki-backend\"}[15m])))"
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "type": "timeseries",
+      "title": "ESP32 telemetry queue depth",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(eki_hardware_telemetry_queue_depth_bucket{service_name=\"eki-backend\"}[15m])))"
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "timeseries",
+      "title": "ESP32 retry/drop events",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 38
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event) (rate(eki_hardware_events_total{service_name=\"eki-backend\"}[15m]))"
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "type": "logs",
+      "title": "Correlated backend/client logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service_name=\"eki-backend\"}"
+        }
+      ]
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["eki", "opentelemetry", "backend"],
+  "tags": [
+    "eki",
+    "opentelemetry",
+    "backend"
+  ],
   "templating": {
-    "list": [
-      { "current": {}, "hide": 0, "includeAll": false, "label": "Metrics", "multi": false, "name": "prometheus", "options": [], "query": "prometheus", "refresh": 1, "regex": "", "skipUrlSync": false, "type": "datasource" },
-      { "current": {}, "hide": 0, "includeAll": false, "label": "Logs", "multi": false, "name": "loki", "options": [], "query": "loki", "refresh": 1, "regex": "/-logs$/", "skipUrlSync": false, "type": "datasource" }
-    ]
+    "list": []
   },
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
   "title": "Eki Backend Observability",
