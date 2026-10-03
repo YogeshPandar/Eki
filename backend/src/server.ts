@@ -54,6 +54,7 @@ import usersRoutes from "./routes/users";
 import settingsRoutes, { settingsV2Router } from "./routes/settings";
 import fleetRoutes, { fleetReconciliationJobsRouter } from "./routes/fleet";
 import privacyRoutes, { privacyDeletionRequestsRouter } from "./routes/privacy";
+import observabilityRoutes from "./routes/observability";
 
 const PORT = process.env.PORT || 4000;
 // Expected replica count behind the load balancer. Every in-memory limiter
@@ -128,6 +129,11 @@ const writeLimiter = createIdentityAwareLimiter({
   windowMs: 60 * 1000,
   limit: shardedLimit(30, RATE_LIMIT_SHARD_FACTOR),
   message: { error: "Write rate limit exceeded." },
+});
+const observabilityLimiter = createIdentityAwareLimiter({
+  windowMs: 60 * 1000,
+  limit: shardedLimit(30, RATE_LIMIT_SHARD_FACTOR),
+  message: { error: "Observability request limit exceeded." },
 });
 
 // ── CORS ──────────────────────────────────────────────────────────────────────
@@ -229,6 +235,7 @@ app.use("/api/v2/settings/global", writeLimiter, settingsV2Router);
 app.use("/api/fleet", writeLimiter, fleetRoutes);
 app.use("/api/privacy", writeLimiter, privacyRoutes);
 app.use("/api/v2/privacy-deletion-requests", writeLimiter, privacyDeletionRequestsRouter);
+app.use("/api/observability", observabilityLimiter, observabilityRoutes);
 
 // ── Health Check ──────────────────────────────────────────────────────────────
 const health = createHealthState();
