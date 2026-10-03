@@ -65,13 +65,19 @@ function enqueue(event: Event): void {
 export async function flushFrontendObservability(): Promise<void> {
   if (flushing || queue.length === 0) return;
   const url = backendUrl();
-  if (!url) return;
-  const { auth } = await import("./firebaseAuth");
-  const user = auth.currentUser;
-  if (!user) return;
+  if (!url) {
+    queue = [];
+    return;
+  }
   flushing = true;
   const batch = queue.splice(0, MAX_EVENTS);
+  const requeue = () => {
+    queue = [...batch, ...queue].slice(-MAX_EVENTS);
+  };
   try {
+    const { auth } = await import("./firebaseAuth");
+    const user = auth.currentUser;
+    if (!user) return;
     const token = await user.getIdToken();
     const response = await fetch(`${url}/api/observability/frontend`, {
       method: "POST",
@@ -82,9 +88,9 @@ export async function flushFrontendObservability(): Promise<void> {
       body: JSON.stringify({ events: batch }),
       keepalive: true,
     });
-    if (!response.ok && response.status >= 500) queue.unshift(...batch.slice(-MAX_EVENTS));
+    if (response.status === 429 || response.status >= 500) requeue();
   } catch {
-    queue.unshift(...batch.slice(-MAX_EVENTS));
+    requeue();
   } finally {
     flushing = false;
     if (queue.length > 0) scheduleFlush();
