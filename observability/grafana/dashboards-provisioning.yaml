@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: Eki
+    orgId: 1
+    folder: Eki
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
+      foldersFromFilesStructure: false
